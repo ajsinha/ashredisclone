@@ -1,0 +1,174 @@
+# Dockerfile
+FROM eclipse-temurin:17-jre-alpine
+
+LABEL maintainer="AshRedis Team"
+LABEL description="High Performance Redis Clone"
+
+# Create app directory
+WORKDIR /app
+
+# Copy the JAR file
+COPY target/redisclone-1.0.0.jar app.jar
+
+# Copy configuration files
+COPY src/main/resources/application.properties /app/config/application.properties
+COPY src/main/resources/users.json /app/config/users.json
+
+# Create data directory for SQLite
+RUN mkdir -p /app/data
+
+# Expose ports
+# 8080 - Web UI
+# 6379 - Network Server
+EXPOSE 8080 6379
+
+# Set environment variables
+ENV SPRING_CONFIG_LOCATION=file:/app/config/application.properties
+ENV JAVA_OPTS="-Xmx2g -Xms512m"
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD wget --quiet --tries=1 --spider http://localhost:8080/actuator/health || exit 1
+
+# Run the application
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
+
+# ============================================
+# docker-compose.yml
+# ============================================
+
+version: '3.8'
+
+services:
+  # Kafka for replication
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    networks:
+      - ashredis-network
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    networks:
+      - ashredis-network
+
+  # ActiveMQ (optional)
+  activemq:
+    image: apache/activemq-classic:5.18.3
+    ports:
+      - "61616:61616"
+      - "8161:8161"
+    environment:
+      ACTIVEMQ_ADMIN_LOGIN: admin
+      ACTIVEMQ_ADMIN_PASSWORD: admin
+    networks:
+      - ashredis-network
+
+  # Primary AshRedis Instance
+  ashredis-primary:
+    build: .
+    ports:
+      - "8080:8080"
+      - "6379:6379"
+    environment:
+      - CLUSTER_MODE=primary
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - ACTIVEMQ_BROKER_URL=tcp://activemq:61616
+      - KAFKA_REPLICATION_ENABLED=true
+      - ACTIVEMQ_ENABLED=true
+    volumes:
+      - ashredis-primary-data:/app/data
+    depends_on:
+      - kafka
+      - activemq
+    networks:
+      - ashredis-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Secondary AshRedis Instance
+  ashredis-secondary:
+    build: .
+    ports:
+      - "8081:8080"
+      - "6380:6379"
+    environment:
+      - CLUSTER_MODE=secondary
+      - SERVER_PORT=8080
+      - NETWORK_SERVER_PORT=6379
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - ACTIVEMQ_BROKER_URL=tcp://activemq:61616
+      - KAFKA_REPLICATION_ENABLED=true
+      - ACTIVEMQ_ENABLED=true
+    volumes:
+      - ashredis-secondary-data:/app/data
+    depends_on:
+      - kafka
+      - activemq
+      - ashredis-primary
+    networks:
+      - ashredis-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  ashredis-primary-data:
+  ashredis-secondary-data:
+
+networks:
+  ashredis-network:
+    driver: bridge
+
+# ============================================
+# Build and Run Instructions
+# ============================================
+
+# Build the application
+# mvn clean package
+
+# Build Docker image
+# docker build -t ashredis:latest .
+
+# Run with docker-compose
+# docker-compose up -d
+
+# View logs
+# docker-compose logs -f ashredis-primary
+# docker-compose logs -f ashredis-secondary
+
+# Stop services
+# docker-compose down
+
+# Stop and remove volumes
+# docker-compose down -v
+
+# Access services:
+# Primary Web UI: http://localhost:8080
+# Secondary Web UI: http://localhost:8081
+# Primary Network: localhost:6379
+# Secondary Network: localhost:6380
+# Kafka: localhost:9092
+# ActiveMQ Console: http://localhost:8161 (admin/admin)
