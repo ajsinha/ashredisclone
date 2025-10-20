@@ -1,5 +1,7 @@
 # AshRedis Clone - Quick Start Guide
 
+## © 2025-2030 Ashutosh Sinha
+
 Get up and running with AshRedis in minutes!
 
 ## Prerequisites
@@ -421,3 +423,16 @@ java -jar target/redisclone-1.0.0.jar > app.log 2>&1
 | Default User | admin/admin123 |
 
 Happy caching with AshRedis! 🚀
+
+## Support
+
+For issues, questions, or contributions, please contact:
+- Email: ajsinha@gmail.com
+- GitHub: https://github.com/yourusername/sajhamcpserver
+
+## License
+
+© 2025-2030 Ashutosh Sinha. All rights reserved.
+
+This software is proprietary and confidential. Unauthorized copying, distribution, or use is strictly prohibited.
+

@@ -1,5 +1,7 @@
 # AshRedis Clone - Project Structure
 
+## © 2025-2030 Ashutosh Sinha
+
 ## Directory Layout
 
 ```
@@ -182,3 +184,16 @@ target/
 ```
 
 The fat JAR includes everything needed to run the application.
+
+## Support
+
+For issues, questions, or contributions, please contact:
+- Email: ajsinha@gmail.com
+- GitHub: https://github.com/yourusername/sajhamcpserver
+
+## License
+
+© 2025-2030 Ashutosh Sinha. All rights reserved.
+
+This software is proprietary and confidential. Unauthorized copying, distribution, or use is strictly prohibited.
+

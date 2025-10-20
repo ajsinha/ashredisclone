@@ -1,5 +1,7 @@
 # AshRedis Clone - Web UI Feature Guide
 
+## © 2025-2030 Ashutosh Sinha
+
 ## Overview
 
 The AshRedis Web UI provides a complete management interface for your cache with role-based access control. This guide covers all available features and how to use them.
@@ -377,3 +379,16 @@ For issues or questions:
 4. Review this guide for proper usage
 
 **Remember:** All destructive operations require confirmation and cannot be undone!
+
+## Support
+
+For issues, questions, or contributions, please contact:
+- Email: ajsinha@gmail.com
+- GitHub: https://github.com/yourusername/sajhamcpserver
+
+## License
+
+© 2025-2030 Ashutosh Sinha. All rights reserved.
+
+This software is proprietary and confidential. Unauthorized copying, distribution, or use is strictly prohibited.
+

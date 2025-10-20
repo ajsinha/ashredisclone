@@ -1,5 +1,7 @@
 # UI Features Changelog
 
+## © 2025-2030 Ashutosh Sinha
+
 ## New Features Added
 
 ### ✅ 1. Region Management
