@@ -1,5 +1,7 @@
 # AshRedis Clone - High Performance Redis Implementation in Java
 
+## © 2025-2030 Ashutosh Sinha
+
 A feature-rich, high-performance Redis clone implemented in Java 17 with Spring Boot, supporting network accessibility, distributed caching, primary-secondary replication, and a comprehensive web management UI.
 
 ## Features
@@ -376,4 +378,12 @@ Proprietary - AshRedis Clone © 2025
 
 ## Support
 
-For issues and questions, contact the development team.
+For issues, questions, or contributions, please contact:
+- Email: ajsinha@gmail.com
+- GitHub: https://github.com/yourusername/sajhamcpserver
+
+## License
+
+© 2025-2030 Ashutosh Sinha. All rights reserved.
+
+This software is proprietary and confidential. Unauthorized copying, distribution, or use is strictly prohibited.
