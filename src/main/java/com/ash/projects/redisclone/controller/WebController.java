@@ -261,6 +261,46 @@ public class WebController {
         return "redirect:/entry/" + region + "/" + key;
     }
 
+    @GetMapping("/entry/edit")
+    public String showEditEntryPage(@RequestParam String region,
+                                    @RequestParam String key,
+                                    HttpSession session,
+                                    Model model,
+                                    RedirectAttributes redirectAttributes) {
+        User user = (User) session.getAttribute("user");
+        if (user == null) {
+            return "redirect:/login";
+        }
+
+        if (!userService.isAdmin(user)) {
+            redirectAttributes.addFlashAttribute("error", "Only admins can edit entries");
+            return "redirect:/entry/" + region + "/" + key;
+        }
+
+        if (replicationService != null && !replicationService.isPrimary()) {
+            redirectAttributes.addFlashAttribute("error", "Cannot modify data on secondary instance");
+            return "redirect:/entry/" + region + "/" + key;
+        }
+
+        // Load the entry
+        String value = cacheService.get(region, key);
+        long ttl = cacheService.ttl(region, key);
+
+        if (value == null && ttl == -2) {
+            redirectAttributes.addFlashAttribute("error", "Entry not found");
+            return "redirect:/region/" + region;
+        }
+
+        model.addAttribute("user", user);
+        model.addAttribute("region", region);
+        model.addAttribute("key", key);
+        model.addAttribute("value", value);
+        model.addAttribute("ttl", ttl);
+        model.addAttribute("isPrimary", replicationService == null || replicationService.isPrimary());
+
+        return "edit-entry";
+    }
+
     @PostMapping("/entry/update")
     public String updateEntry(@RequestParam String region,
                               @RequestParam String key,
