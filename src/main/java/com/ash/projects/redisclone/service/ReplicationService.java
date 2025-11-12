@@ -199,6 +199,30 @@ public class ReplicationService {
     }
 
     /**
+     * Replicate DELETE_REGION operation
+     */
+    public void replicateDeleteRegion(String region) {
+        if (!isPrimary.get()) {
+            logger.warn("Cannot replicate - not primary instance");
+            return;
+        }
+
+        try {
+            ReplicationEvent event = new ReplicationEvent();
+            event.setEventId(UUID.randomUUID().toString());
+            event.setEventType("DELETE_REGION");
+            event.setRegion(region);
+
+            String json = objectMapper.writeValueAsString(event);
+            kafkaTemplate.send(replicationTopic, region, json);
+
+            logger.info("Replicated DELETE_REGION: region={}", region);
+        } catch (Exception e) {
+            logger.error("Error replicating DELETE_REGION operation", e);
+        }
+    }
+
+    /**
      * Listen for replication events (secondary instances)
      */
     @KafkaListener(topics = "${kafka.replication.topic:ashredis-replication}",
@@ -229,6 +253,11 @@ public class ReplicationService {
                     cacheService.expire(event.getRegion(), event.getKey(), seconds);
                     logger.debug("Applied replicated EXPIRE: region={}, key={}",
                             event.getRegion(), event.getKey());
+                }
+                case "DELETE_REGION" -> {
+                    cacheService.deleteRegion(event.getRegion());
+                    logger.info("Applied replicated DELETE_REGION: region={}",
+                            event.getRegion());
                 }
                 default -> logger.warn("Unknown replication event type: {}", event.getEventType());
             }

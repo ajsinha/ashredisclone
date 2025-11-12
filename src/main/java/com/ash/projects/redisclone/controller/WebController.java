@@ -319,13 +319,17 @@ public class WebController {
             return "redirect:/regions";
         }
 
-        // Delete all keys in the region
-        Set<String> keys = cacheService.keys(regionName, "*");
-        if (!keys.isEmpty()) {
-            cacheService.del(regionName, keys.toArray(new String[0]));
+        try {
+            // Delete the entire region (this will delete all keys and clean up metadata)
+            cacheService.deleteRegion(regionName);
+
+            logger.info("Region '{}' deleted successfully by user {}", regionName, user.getUserid());
+            redirectAttributes.addFlashAttribute("success", "Region '" + regionName + "' deleted successfully");
+        } catch (Exception e) {
+            logger.error("Error deleting region '{}': {}", regionName, e.getMessage(), e);
+            redirectAttributes.addFlashAttribute("error", "Error deleting region: " + e.getMessage());
         }
 
-        redirectAttributes.addFlashAttribute("success", "Region '" + regionName + "' deleted successfully");
         return "redirect:/regions";
     }
 

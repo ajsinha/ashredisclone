@@ -25,14 +25,14 @@ import java.util.stream.Collectors;
 
 /**
  * Cache Service - Updated to use config-driven repository
- * 
+ *
  * CHANGES FROM ORIGINAL:
  * - Line 4: Changed from CacheRepositorySQL to CacheRepositoryInterface
  * - Line 34: Inject CacheRepositoryInterface instead of CacheRepositorySQL
- * 
+ *
  * The actual implementation (SQL or RocksDB) is determined by application configuration.
  * No other code changes are required!
- * 
+ *
  * @author ajsinha@gmail.com
  * Copyright (c) 2025 Ash Sinha. All rights reserved.
  */
@@ -494,6 +494,59 @@ public class CacheService {
 
     public Set<String> getAllRegions() {
         return new HashSet<>(memoryCache.keySet());
+    }
+
+    /**
+     * Delete an entire region and all its keys
+     * This method cleans up:
+     * 1. All entries from the database
+     * 2. All in-memory cache entries
+     * 3. All metadata (allKeys, lruTracking, regionLocks, memoryCache)
+     *
+     * @param region The region to delete
+     */
+    public void deleteRegion(String region) {
+        if (region == null || region.equals(defaultRegion)) {
+            throw new IllegalArgumentException("Cannot delete default region");
+        }
+
+        logger.info("Deleting region: {}", region);
+
+        ReadWriteLock lock = getRegionLock(region);
+        lock.writeLock().lock();
+        try {
+            // 1. Replicate if enabled
+            if (replicationService != null) {
+                try {
+                    replicationService.replicateDeleteRegion(region);
+                } catch (Exception e) {
+                    logger.warn("Failed to replicate DELETE_REGION operation: {}", e.getMessage());
+                }
+            }
+
+            // 2. Delete from database
+            cacheRepository.deleteRegion(region);
+            logger.debug("Deleted region '{}' from database", region);
+
+            // 3. Clean up in-memory structures
+            memoryCache.remove(region);
+            allKeys.remove(region);
+            lruTracking.remove(region);
+            regionLocks.remove(region);
+
+            // 4. Publish event if enabled
+            if (pubSubService != null) {
+                try {
+                    pubSubService.publishChange(region, "*", "DELETE_REGION");
+                } catch (Exception e) {
+                    logger.warn("Failed to publish DELETE_REGION event: {}", e.getMessage());
+                }
+            }
+
+            logger.info("Region '{}' deleted successfully", region);
+        } finally {
+            lock.writeLock().unlock();
+        }
     }
 
     public Map<String, Object> getRegionStats(String region) {
