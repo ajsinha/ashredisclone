@@ -1,8 +1,16 @@
 package com.ash.projects.redisclone.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 import java.io.Serializable;
 
-// Base Cache Entry
+/**
+ * Base Cache Entry
+ *
+ * FIXED: Added @JsonIgnoreProperties to handle deserialization
+ * of JSON with unknown fields (like "expired", "ttlSeconds")
+ */
+@JsonIgnoreProperties(ignoreUnknown = true)  // ← FIX: Ignores unknown JSON fields
 public class CacheEntry implements Serializable {
     private String key;
     private String region;
@@ -68,4 +76,3 @@ public class CacheEntry implements Serializable {
     public boolean isInMemory() { return inMemory; }
     public void setInMemory(boolean inMemory) { this.inMemory = inMemory; }
 }
-

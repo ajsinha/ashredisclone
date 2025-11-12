@@ -4,6 +4,8 @@ import com.ash.projects.redisclone.model.User;
 import com.ash.projects.redisclone.repository.CacheRepository;
 import com.ash.projects.redisclone.service.*;
 import jakarta.servlet.http.HttpSession;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Controller;
@@ -13,8 +15,17 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.util.*;
 
+/**
+ * Web Controller for AshRedis Clone
+ * Handles all web-based interactions for the cache management system
+ *
+ * Copyright (c) 2025 AshRedis Clone
+ * Contact: ajsinha@gmail.com
+ */
 @Controller
 public class WebController {
+
+    private static final Logger logger = LoggerFactory.getLogger(WebController.class);
 
     @Autowired
     private UserService userService;
@@ -112,39 +123,175 @@ public class WebController {
         return "regions";
     }
 
-    @PostMapping("/region/create")
-    public String createRegion(@RequestParam String regionName,
-                               HttpSession session,
-                               RedirectAttributes redirectAttributes) {
+    /**
+     * Display the create region page
+     * NEW ENDPOINT - Shows dedicated region creation form with optional entry
+     *
+     * @param model Spring MVC model
+     * @param session HTTP session
+     * @return view name
+     */
+    @GetMapping("/region/create")
+    public String showCreateRegionPage(Model model, HttpSession session) {
+        // Check authentication
         User user = (User) session.getAttribute("user");
         if (user == null) {
             return "redirect:/login";
         }
 
+        // Only admins can create regions
         if (!userService.isAdmin(user)) {
-            redirectAttributes.addFlashAttribute("error", "Only admins can create regions");
+            model.addAttribute("error", "Only administrators can create regions");
             return "redirect:/regions";
         }
 
+        // Check if primary instance
+        boolean isPrimary = replicationService == null || replicationService.isPrimary();
+        if (!isPrimary) {
+            model.addAttribute("error", "Region creation is only allowed on PRIMARY instance");
+            return "redirect:/regions";
+        }
+
+        // Add model attributes for base template
+        model.addAttribute("user", user);
+        model.addAttribute("isPrimary", isPrimary);
+
+        logger.info("User {} accessing create region page", user.getUserid());
+
+        return "create-region";
+    }
+
+    /**
+     * Handle region creation with optional initial entry
+     * NEW ENDPOINT - Supports creating a region and optionally adding the first entry
+     *
+     * @param regionName Name of the region to create (required)
+     * @param key Key for initial entry (optional)
+     * @param value Value for initial entry (optional)
+     * @param ttl Time-to-live for initial entry in seconds (optional, default 0)
+     * @param session HTTP session
+     * @param redirectAttributes Spring redirect attributes for flash messages
+     * @return redirect path
+     */
+    @PostMapping("/region/create-with-entry")
+    public String createRegionWithEntry(
+            @RequestParam("regionName") String regionName,
+            @RequestParam(value = "key", required = false) String key,
+            @RequestParam(value = "value", required = false) String value,
+            @RequestParam(value = "ttl", required = false, defaultValue = "0") int ttl,
+            HttpSession session,
+            RedirectAttributes redirectAttributes) {
+
+        // Check authentication
+        User user = (User) session.getAttribute("user");
+        if (user == null) {
+            return "redirect:/login";
+        }
+
+        // Only admins can create regions
+        if (!userService.isAdmin(user)) {
+            redirectAttributes.addFlashAttribute("error",
+                    "Only administrators can create regions");
+            return "redirect:/regions";
+        }
+
+        // Check if primary instance
         if (replicationService != null && !replicationService.isPrimary()) {
-            redirectAttributes.addFlashAttribute("error", "Cannot create region on secondary instance");
+            redirectAttributes.addFlashAttribute("error",
+                    "Region creation is only allowed on PRIMARY instance");
             return "redirect:/regions";
         }
 
-        // Validate region name
-        if (regionName == null || regionName.trim().isEmpty()) {
-            redirectAttributes.addFlashAttribute("error", "Region name cannot be empty");
-            return "redirect:/regions";
+        try {
+            // Validate region name
+            if (regionName == null || regionName.trim().isEmpty()) {
+                redirectAttributes.addFlashAttribute("error",
+                        "Region name cannot be empty");
+                return "redirect:/region/create";
+            }
+
+            // Validate region name pattern (alphanumeric, underscore, hyphen)
+            if (!regionName.matches("[a-zA-Z0-9_-]+")) {
+                redirectAttributes.addFlashAttribute("error",
+                        "Region name can only contain alphanumeric characters, underscores, and hyphens");
+                return "redirect:/region/create";
+            }
+
+            // Log region creation
+            logger.info("User {} creating region: {}", user.getUserid(), regionName);
+
+            // Create region and check if initial entry is provided
+            boolean entryCreated = false;
+
+            if (key != null && !key.trim().isEmpty() &&
+                    value != null && !value.trim().isEmpty()) {
+
+                logger.info("Creating initial entry in region {}: key={}, ttl={}",
+                        regionName, key, ttl);
+
+                // Set the cache entry with or without TTL
+                if (ttl > 0) {
+                    Long expiresAt = System.currentTimeMillis() + (ttl * 1000L);
+                    cacheService.set(regionName, key, value, expiresAt);
+                    logger.info("Entry created with TTL: {} seconds", ttl);
+                } else {
+                    cacheService.set(regionName, key, value, null);
+                    logger.info("Entry created with no expiration");
+                }
+
+                entryCreated = true;
+            } else {
+                // Create region with a dummy key and then delete it
+                String dummyKey = "__region_init__";
+                cacheService.set(regionName, dummyKey, "initialized", null);
+                cacheService.del(regionName, dummyKey);
+                logger.info("Region created without initial entry");
+            }
+
+            // Set success message
+            if (entryCreated) {
+                redirectAttributes.addFlashAttribute("success",
+                        String.format("Region '%s' created successfully with initial entry '%s'",
+                                regionName, key));
+            } else {
+                redirectAttributes.addFlashAttribute("success",
+                        String.format("Region '%s' created successfully", regionName));
+            }
+
+            // Log the successful operation
+            logger.info("Region '{}' created successfully by user {}",
+                    regionName, user.getUserid());
+
+            // Redirect to the new region's detail page
+            return "redirect:/region/" + regionName;
+
+        } catch (IllegalArgumentException e) {
+            // Handle validation errors
+            logger.warn("Validation error creating region: {}", e.getMessage());
+            redirectAttributes.addFlashAttribute("error",
+                    "Validation error: " + e.getMessage());
+            return "redirect:/region/create";
+
+        } catch (Exception e) {
+            // Handle other errors
+            logger.error("Error creating region '{}': {}", regionName, e.getMessage(), e);
+            redirectAttributes.addFlashAttribute("error",
+                    "Error creating region: " + e.getMessage());
+            return "redirect:/region/create";
         }
+    }
 
-        // Create region by setting a dummy key (region will be created automatically)
-        String dummyKey = "__region_init__";
-        cacheService.set(regionName, dummyKey, "initialized", null);
-        // Optionally delete the dummy key
-        cacheService.del(regionName, dummyKey);
-
-        redirectAttributes.addFlashAttribute("success", "Region '" + regionName + "' created successfully");
-        return "redirect:/region/" + regionName;
+    /**
+     * UPDATED - Backward compatibility endpoint
+     * Delegates to createRegionWithEntry for simple region creation
+     * This maintains compatibility with the old modal-based approach
+     */
+    @PostMapping("/region/create")
+    public String createRegion(@RequestParam String regionName,
+                               HttpSession session,
+                               RedirectAttributes redirectAttributes) {
+        // Delegate to the new handler with no entry parameters
+        return createRegionWithEntry(regionName, null, null, 0, session, redirectAttributes);
     }
 
     @PostMapping("/region/delete")
@@ -227,22 +374,21 @@ public class WebController {
     }
 
     @GetMapping("/entry/create")
-    public String showCreateEntryPage(@RequestParam String region,
-                                      HttpSession session,
-                                      Model model,
-                                      RedirectAttributes redirectAttributes) {
+    public String createEntryPage(@RequestParam String region,
+                                  HttpSession session,
+                                  Model model) {
         User user = (User) session.getAttribute("user");
         if (user == null) {
             return "redirect:/login";
         }
 
         if (!userService.isAdmin(user)) {
-            redirectAttributes.addFlashAttribute("error", "Only admins can create entries");
+            model.addAttribute("error", "Only admins can create entries");
             return "redirect:/region/" + region;
         }
 
         if (replicationService != null && !replicationService.isPrimary()) {
-            redirectAttributes.addFlashAttribute("error", "Cannot modify data on secondary instance");
+            model.addAttribute("error", "Cannot create entries on secondary instance");
             return "redirect:/region/" + region;
         }
 
@@ -271,7 +417,7 @@ public class WebController {
         }
 
         if (replicationService != null && !replicationService.isPrimary()) {
-            redirectAttributes.addFlashAttribute("error", "Cannot modify data on secondary instance");
+            redirectAttributes.addFlashAttribute("error", "Cannot create entries on secondary instance");
             return "redirect:/region/" + region;
         }
 
@@ -283,11 +429,11 @@ public class WebController {
     }
 
     @GetMapping("/entry/edit")
-    public String showEditEntryPage(@RequestParam String region,
-                                    @RequestParam String key,
-                                    HttpSession session,
-                                    Model model,
-                                    RedirectAttributes redirectAttributes) {
+    public String editEntryPage(@RequestParam String region,
+                                @RequestParam String key,
+                                HttpSession session,
+                                Model model,
+                                RedirectAttributes redirectAttributes) {
         User user = (User) session.getAttribute("user");
         if (user == null) {
             return "redirect:/login";
@@ -487,7 +633,10 @@ public class WebController {
         return "search";
     }
 
-    // Inner class for search results
+    /**
+     * Inner class for search results
+     * Represents a search result entry with region, key, value, and TTL information
+     */
     public static class SearchResult {
         private String region;
         private String key;
@@ -506,6 +655,10 @@ public class WebController {
         public long getTtl() { return ttl; }
         public void setTtl(long ttl) { this.ttl = ttl; }
 
+        /**
+         * Get a preview of the value (first 50 characters)
+         * @return truncated value for display
+         */
         public String getValuePreview() {
             if (value == null) return "null";
             return value.length() > 50 ? value.substring(0, 50) + "..." : value;

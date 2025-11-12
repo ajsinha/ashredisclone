@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Create Region - AshRedis</title>
+</head>
+<body>
+<th:block th:replace="base :: layout(~{::title}, ~{::main})">
+    <main>
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1>Create New Region</h1>
+            <div>
+                <a th:href="@{/regions}" class="btn btn-secondary">
+                    <i class="bi bi-arrow-left"></i> Back to Regions
+                </a>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-lg-8">
+                <div class="card">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0">🗂️ Region Details</h5>
+                    </div>
+                    <div class="card-body">
+                        <form th:action="@{/region/create-with-entry}" method="post">
+                            <!-- Region Name -->
+                            <div class="mb-4">
+                                <label for="regionName" class="form-label">
+                                    Region Name <span class="text-danger">*</span>
+                                </label>
+                                <div class="input-group">
+                                    <span class="input-group-text">📁</span>
+                                    <input type="text"
+                                           class="form-control"
+                                           id="regionName"
+                                           name="regionName"
+                                           placeholder="e.g., users, sessions, products, cache"
+                                           pattern="[a-zA-Z0-9_-]+"
+                                           required
+                                           autofocus>
+                                </div>
+                                <div class="form-text">
+                                    Use alphanumeric characters, underscores, and hyphens only. Examples: <code>users</code>, <code>user_sessions</code>, <code>product-cache</code>
+                                </div>
+                            </div>
+
+                            <hr class="my-4">
+
+                            <!-- Optional Entry Section -->
+                            <div class="mb-3">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="addInitialEntry"
+                                           onchange="toggleEntrySection()">
+                                    <label class="form-check-label" for="addInitialEntry">
+                                        <strong>Add Initial Entry (Optional)</strong>
+                                    </label>
+                                </div>
+                                <small class="text-muted">Create your first cache entry in this region right away</small>
+                            </div>
+
+                            <!-- Entry Details (Initially Hidden) -->
+                            <div id="entrySection" style="display: none;">
+                                <div class="alert alert-info">
+                                    <strong>💡 Tip:</strong> Adding an initial entry is optional but convenient. You can always add entries later.
+                                </div>
+
+                                <!-- Key Input -->
+                                <div class="mb-3">
+                                    <label for="key" class="form-label">
+                                        Key
+                                    </label>
+                                    <div class="input-group">
+                                        <span class="input-group-text">🔑</span>
+                                        <input type="text"
+                                               class="form-control"
+                                               id="key"
+                                               name="key"
+                                               placeholder="e.g., user:123, session:abc, product:item-456">
+                                    </div>
+                                    <div class="form-text">
+                                        Enter a unique key identifier. Common patterns: <code>prefix:id</code>, <code>namespace:key</code>
+                                    </div>
+                                </div>
+
+                                <!-- Value Input -->
+                                <div class="mb-3">
+                                    <label for="value" class="form-label">
+                                        Value
+                                    </label>
+                                    <textarea class="form-control"
+                                              id="value"
+                                              name="value"
+                                              rows="10"
+                                              placeholder="Enter value (can be text, JSON, XML, or any string data)"
+                                              style="font-family: 'Courier New', monospace;"></textarea>
+                                    <div class="form-text">
+                                        The value can be any text format. For structured data, JSON is recommended.
+                                    </div>
+                                </div>
+
+                                <!-- TTL Input -->
+                                <div class="mb-3">
+                                    <label for="ttl" class="form-label">
+                                        TTL (Time To Live)
+                                    </label>
+                                    <div class="input-group">
+                                        <span class="input-group-text">⏱️</span>
+                                        <input type="number"
+                                               class="form-control"
+                                               id="ttl"
+                                               name="ttl"
+                                               min="0"
+                                               value="0"
+                                               placeholder="0">
+                                        <span class="input-group-text">seconds</span>
+                                    </div>
+                                    <div class="form-text">
+                                        Time in seconds until the entry expires. Set to <strong>0</strong> for no expiration.
+                                    </div>
+                                </div>
+
+                                <!-- Quick TTL Buttons -->
+                                <div class="mb-3">
+                                    <label class="form-label">Quick TTL Values:</label>
+                                    <div class="btn-group" role="group">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setTTL(60)">
+                                            1 min
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setTTL(300)">
+                                            5 min
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setTTL(3600)">
+                                            1 hour
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setTTL(86400)">
+                                            1 day
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setTTL(604800)">
+                                            1 week
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setTTL(0)">
+                                            Never
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Action Buttons -->
+                            <div class="d-grid gap-2 d-md-flex justify-content-md-end mt-4">
+                                <a th:href="@{/regions}" class="btn btn-secondary">
+                                    Cancel
+                                </a>
+                                <button type="submit" class="btn btn-success">
+                                    <i class="bi bi-plus-circle"></i> Create Region
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Help Sidebar -->
+            <div class="col-lg-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h6 class="mb-0">💡 About Regions</h6>
+                    </div>
+                    <div class="card-body">
+                        <h6>What are Regions?</h6>
+                        <p class="small">
+                            Regions are logical partitions for organizing your cache data.
+                            They help you separate different types of data and manage them independently.
+                        </p>
+
+                        <hr>
+
+                        <h6>Region Naming Examples</h6>
+                        <ul class="small">
+                            <li><code>users</code> - User profile data</li>
+                            <li><code>sessions</code> - Session information</li>
+                            <li><code>products</code> - Product catalog</li>
+                            <li><code>user-cache</code> - User-specific cache</li>
+                            <li><code>temp_data</code> - Temporary storage</li>
+                        </ul>
+
+                        <hr>
+
+                        <h6>Key Benefits</h6>
+                        <ul class="small mb-0">
+                            <li>Organize data by type or purpose</li>
+                            <li>Keys must be unique only within a region</li>
+                            <li>Easy bulk operations per region</li>
+                            <li>Better performance with targeted queries</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <h6 class="mb-0">🔑 Initial Entry Tips</h6>
+                    </div>
+                    <div class="card-body">
+                        <h6>Key Naming Conventions</h6>
+                        <ul class="small">
+                            <li><code>user:123</code> - User data by ID</li>
+                            <li><code>session:abc-def</code> - Session data</li>
+                            <li><code>cache:product:456</code> - Cached product</li>
+                            <li><code>config:app:theme</code> - Configuration</li>
+                        </ul>
+
+                        <hr>
+
+                        <h6>Value Formats</h6>
+                        <div class="mb-2">
+                            <strong>Simple String:</strong>
+                            <pre class="small bg-light p-2 rounded mb-1">Hello World</pre>
+                        </div>
+                        <div class="mb-2">
+                            <strong>JSON Object:</strong>
+                            <pre class="small bg-light p-2 rounded mb-1">{
+  "name": "John",
+  "age": 30
+}</pre>
+                        </div>
+                        <div class="mb-0">
+                            <strong>JSON Array:</strong>
+                            <pre class="small bg-light p-2 rounded mb-0">["item1", "item2"]</pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <h6 class="mb-0">⚠️ Important Notes</h6>
+                    </div>
+                    <div class="card-body">
+                        <ul class="small mb-0">
+                            <li>Region names must be unique across the system</li>
+                            <li>Use descriptive names for better organization</li>
+                            <li>The default <code>region0</code> is created automatically</li>
+                            <li>Adding an initial entry is optional</li>
+                            <li>You can add more entries after region creation</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+</th:block>
+
+<script>
+    function toggleEntrySection() {
+        const checkbox = document.getElementById('addInitialEntry');
+        const section = document.getElementById('entrySection');
+        const keyInput = document.getElementById('key');
+        const valueInput = document.getElementById('value');
+
+        if (checkbox.checked) {
+            section.style.display = 'block';
+            keyInput.required = true;
+            valueInput.required = true;
+        } else {
+            section.style.display = 'none';
+            keyInput.required = false;
+            valueInput.required = false;
+        }
+    }
+
+    function setTTL(seconds) {
+        document.getElementById('ttl').value = seconds;
+    }
+
+    // Auto-format JSON on blur
+    document.getElementById('value').addEventListener('blur', function() {
+        const value = this.value.trim();
+        if (value.startsWith('{') || value.startsWith('[')) {
+            try {
+                const formatted = JSON.stringify(JSON.parse(value), null, 2);
+                this.value = formatted;
+            } catch (e) {
+                // Not valid JSON, ignore
+            }
+        }
+    });
+
+    // Form validation
+    document.querySelector('form').addEventListener('submit', function(e) {
+        const checkbox = document.getElementById('addInitialEntry');
+        const keyInput = document.getElementById('key');
+        const valueInput = document.getElementById('value');
+
+        if (checkbox.checked) {
+            if (!keyInput.value.trim()) {
+                e.preventDefault();
+                alert('Please enter a key for the initial entry, or uncheck the "Add Initial Entry" option.');
+                keyInput.focus();
+                return false;
+            }
+            if (!valueInput.value.trim()) {
+                e.preventDefault();
+                alert('Please enter a value for the initial entry, or uncheck the "Add Initial Entry" option.');
+                valueInput.focus();
+                return false;
+            }
+        }
+    });
+</script>
+</body>
+</html>

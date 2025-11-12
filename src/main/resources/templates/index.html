@@ -31,12 +31,11 @@
                         <h2 th:text="${regions.size()}">0</h2>
                         <div class="d-grid gap-2">
                             <a href="/regions" class="btn btn-light btn-sm">View All Regions</a>
-                            <button type="button"
-                                    class="btn btn-outline-light btn-sm"
-                                    th:if="${user.isAdmin() and isPrimary}"
-                                    data-bs-toggle="modal" data-bs-target="#quickCreateRegionModal">
+                            <a th:href="@{/region/create}"
+                               class="btn btn-outline-light btn-sm"
+                               th:if="${user.isAdmin() and isPrimary}">
                                 + Create Region
-                            </button>
+                            </a>
                         </div>
                     </div>
                 </div>
@@ -89,12 +88,11 @@
                             <p>No regions available yet. Regions are automatically created when you add data.</p>
                             <hr>
                             <div class="d-grid gap-2 d-md-flex">
-                                <button type="button"
-                                        class="btn btn-success"
-                                        th:if="${user.isAdmin() and isPrimary}"
-                                        data-bs-toggle="modal" data-bs-target="#quickCreateRegionModal">
+                                <a th:href="@{/region/create}"
+                                   class="btn btn-success"
+                                   th:if="${user.isAdmin() and isPrimary}">
                                     Create Your First Region
-                                </button>
+                                </a>
                                 <a href="/search" class="btn btn-primary">
                                     Or Search Existing Data
                                 </a>
@@ -133,36 +131,6 @@
                             </dd>
                         </dl>
                     </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Quick Create Region Modal -->
-        <div class="modal fade" id="quickCreateRegionModal" tabindex="-1">
-            <div class="modal-dialog">
-                <div class="modal-content">
-                    <form th:action="@{/region/create}" method="post">
-                        <div class="modal-header">
-                            <h5 class="modal-title">Quick Create Region</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                        </div>
-                        <div class="modal-body">
-                            <div class="mb-3">
-                                <label for="regionName" class="form-label">Region Name</label>
-                                <input type="text" class="form-control" id="regionName"
-                                       name="regionName" required
-                                       pattern="[a-zA-Z0-9_-]+"
-                                       placeholder="e.g., users, sessions, products">
-                                <div class="form-text">
-                                    Use alphanumeric characters, underscores, and hyphens only.
-                                </div>
-                            </div>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                            <button type="submit" class="btn btn-success">Create Region</button>
-                        </div>
-                    </form>
                 </div>
             </div>
         </div>

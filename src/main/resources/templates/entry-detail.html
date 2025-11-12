@@ -3,6 +3,23 @@
 <html xmlns:th="http://www.thymeleaf.org">
 <head>
     <title th:text="'Entry: ' + ${key} + ' - AshRedis'">Entry Detail</title>
+    <style>
+        .ttl-countdown {
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            font-size: 1.1em;
+            transition: all 0.3s ease;
+        }
+
+        .ttl-pulse {
+            animation: pulse 1s ease-in-out;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+    </style>
 </head>
 <body>
 <th:block th:replace="base :: layout(~{::title}, ~{::main})">
@@ -41,24 +58,32 @@
 
                     <dt class="col-sm-3">TTL (Time To Live):</dt>
                     <dd class="col-sm-9">
-                            <span th:if="${ttl == -1}" class="badge bg-success">
-                                <i class="bi bi-infinity"></i> No expiration
-                            </span>
+                        <!-- No expiration -->
+                        <span th:if="${ttl == -1}" class="badge bg-success">
+                            <i class="bi bi-infinity"></i> No expiration
+                        </span>
+
+                        <!-- Key does not exist -->
                         <span th:if="${ttl == -2}" class="badge bg-danger">
-                                <i class="bi bi-x-circle"></i> Key does not exist
-                            </span>
-                        <span th:if="${ttl > 0}" class="badge bg-warning text-dark"
+                            <i class="bi bi-x-circle"></i> Key does not exist
+                        </span>
+
+                        <!-- Countdown TTL (with live update) -->
+                        <span th:if="${ttl > 0}"
+                              id="ttl-badge"
+                              class="badge bg-warning text-dark ttl-countdown"
+                              th:data-initial-ttl="${ttl}"
                               th:text="'⏱️ ' + ${ttl} + ' seconds remaining'">
-                                60 seconds
-                            </span>
+                            60 seconds
+                        </span>
                     </dd>
 
                     <dt class="col-sm-3">Value:</dt>
                     <dd class="col-sm-9">
                         <div class="position-relative">
-                                <pre class="bg-light p-3 border rounded"
-                                     style="max-height: 400px; overflow-y: auto;"
-                                     th:text="${value != null ? value : 'null'}">value</pre>
+                            <pre class="bg-light p-3 border rounded"
+                                 style="max-height: 400px; overflow-y: auto;"
+                                 th:text="${value != null ? value : 'null'}">value</pre>
                             <button type="button" class="btn btn-sm btn-outline-secondary position-absolute top-0 end-0 m-2"
                                     onclick="copyToClipboard()"
                                     title="Copy to clipboard">
@@ -114,6 +139,7 @@
 </th:block>
 
 <script th:inline="javascript">
+    // Copy to clipboard function
     function copyToClipboard() {
         const value = [[${value}]];
         navigator.clipboard.writeText(value).then(function() {
@@ -122,6 +148,95 @@
             console.error('Could not copy text: ', err);
         });
     }
+
+    // Live TTL Countdown
+    (function() {
+        const ttlBadge = document.getElementById('ttl-badge');
+
+        // Only start countdown if badge exists (TTL > 0)
+        if (!ttlBadge) {
+            return;
+        }
+
+        // Get initial TTL value from data attribute
+        let remainingSeconds = parseInt(ttlBadge.getAttribute('data-initial-ttl'));
+
+        if (isNaN(remainingSeconds) || remainingSeconds <= 0) {
+            return;
+        }
+
+        // Store the start time
+        const startTime = Date.now();
+        const initialTTL = remainingSeconds;
+
+        // Update function
+        function updateTTL() {
+            // Calculate elapsed time
+            const elapsed = Math.floor((Date.now() - startTime) / 1000);
+            remainingSeconds = initialTTL - elapsed;
+
+            // If expired
+            if (remainingSeconds <= 0) {
+                ttlBadge.className = 'badge bg-danger text-white ttl-countdown ttl-pulse';
+                ttlBadge.innerHTML = '<i class="bi bi-x-circle"></i> EXPIRED';
+                clearInterval(countdownInterval);
+
+                // Show alert after 2 seconds
+                setTimeout(function() {
+                    if (confirm('This entry has expired. Refresh the page to verify or return to region list?')) {
+                        window.location.reload();
+                    }
+                }, 2000);
+                return;
+            }
+
+            // Format the time display
+            let displayText;
+            let badgeClass;
+
+            if (remainingSeconds > 3600) {
+                // More than 1 hour - show hours and minutes
+                const hours = Math.floor(remainingSeconds / 3600);
+                const minutes = Math.floor((remainingSeconds % 3600) / 60);
+                const seconds = remainingSeconds % 60;
+                displayText = `⏱️ ${hours}h ${minutes}m ${seconds}s remaining`;
+                badgeClass = 'badge bg-success text-white ttl-countdown';
+            } else if (remainingSeconds > 60) {
+                // More than 1 minute - show minutes and seconds
+                const minutes = Math.floor(remainingSeconds / 60);
+                const seconds = remainingSeconds % 60;
+                displayText = `⏱️ ${minutes}m ${seconds}s remaining`;
+                badgeClass = 'badge bg-info text-white ttl-countdown';
+            } else if (remainingSeconds > 30) {
+                // 31-60 seconds - yellow warning
+                displayText = `⏱️ ${remainingSeconds} seconds remaining`;
+                badgeClass = 'badge bg-warning text-dark ttl-countdown';
+            } else if (remainingSeconds > 10) {
+                // 11-30 seconds - orange alert
+                displayText = `⏱️ ${remainingSeconds} seconds remaining`;
+                badgeClass = 'badge bg-warning text-dark ttl-countdown';
+            } else {
+                // 1-10 seconds - red critical with pulse
+                displayText = `⏱️ ${remainingSeconds} seconds remaining`;
+                badgeClass = 'badge bg-danger text-white ttl-countdown ttl-pulse';
+            }
+
+            // Update the badge
+            ttlBadge.className = badgeClass;
+            ttlBadge.textContent = displayText;
+        }
+
+        // Initial update
+        updateTTL();
+
+        // Update every second
+        const countdownInterval = setInterval(updateTTL, 1000);
+
+        // Clean up on page unload
+        window.addEventListener('beforeunload', function() {
+            clearInterval(countdownInterval);
+        });
+    })();
 </script>
 </body>
 </html>
