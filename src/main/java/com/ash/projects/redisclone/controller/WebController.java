@@ -1,9 +1,11 @@
 package com.ash.projects.redisclone.controller;
 
 import com.ash.projects.redisclone.model.User;
+import com.ash.projects.redisclone.repository.CacheRepository;
 import com.ash.projects.redisclone.service.*;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
@@ -29,6 +31,12 @@ public class WebController {
     @Autowired(required = false)
     private PubSubService pubSubService;
 
+    @Autowired
+    private CacheRepository cacheRepository;
+
+    @Value("${cache.rocksdb.base.path:./data/rocksdb}")
+    private String rocksDbBasePath;
+
     @GetMapping("/")
     public String index(HttpSession session, Model model) {
         User user = (User) session.getAttribute("user");
@@ -36,9 +44,22 @@ public class WebController {
             return "redirect:/login";
         }
 
+        // Get repository information
+        String repositoryType = cacheRepository.getImplementationType();
+        String repositoryInfo;
+
+        if (cacheRepository.isRocksDbImplementation()) {
+            repositoryInfo = "RocksDB (" + rocksDbBasePath + ")";
+        } else {
+            // SQL implementation
+            repositoryInfo = "SQL Database";
+        }
+
         model.addAttribute("user", user);
         model.addAttribute("regions", cacheService.getAllRegions());
         model.addAttribute("isPrimary", replicationService == null || replicationService.isPrimary());
+        model.addAttribute("repositoryType", repositoryType);
+        model.addAttribute("repositoryInfo", repositoryInfo);
 
         return "index";
     }
@@ -365,9 +386,22 @@ public class WebController {
 
         Map<String, Object> info = commandService.info(null);
 
+        // Get repository information
+        String repositoryType = cacheRepository.getImplementationType();
+        String repositoryInfo;
+
+        if (cacheRepository.isRocksDbImplementation()) {
+            repositoryInfo = "RocksDB (" + rocksDbBasePath + ")";
+        } else {
+            // SQL implementation
+            repositoryInfo = "SQL Database";
+        }
+
         model.addAttribute("user", user);
         model.addAttribute("info", info);
         model.addAttribute("isPrimary", replicationService == null || replicationService.isPrimary());
+        model.addAttribute("repositoryType", repositoryType);
+        model.addAttribute("repositoryInfo", repositoryInfo);
 
         if (pubSubService != null) {
             model.addAttribute("pubsubStats", pubSubService.getSubscriberCounts());

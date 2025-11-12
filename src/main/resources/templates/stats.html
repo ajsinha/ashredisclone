@@ -28,6 +28,12 @@
                                     <span class="badge" th:classappend="${isPrimary ? 'bg-success' : 'bg-warning'}"
                                           th:text="${isPrimary ? 'PRIMARY' : 'SECONDARY'}">PRIMARY</span>
                             </dd>
+
+                            <dt class="col-sm-6">Database:</dt>
+                            <dd class="col-sm-6">
+                                <span class="badge bg-info me-2" th:text="${repositoryType}">SQL</span>
+                                <span th:text="${repositoryInfo}">SQL Database</span>
+                            </dd>
                         </dl>
                     </div>
                 </div>

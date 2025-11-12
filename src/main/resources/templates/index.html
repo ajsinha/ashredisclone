@@ -127,7 +127,10 @@
                             <dd class="col-sm-9">Port 6379 (Active)</dd>
 
                             <dt class="col-sm-3">Database</dt>
-                            <dd class="col-sm-9">SQLite (ashredis.db)</dd>
+                            <dd class="col-sm-9">
+                                <span class="badge bg-info me-2" th:text="${repositoryType}">SQL</span>
+                                <span th:text="${repositoryInfo}">SQL Database</span>
+                            </dd>
                         </dl>
                     </div>
                 </div>
