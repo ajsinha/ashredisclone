@@ -53,9 +53,9 @@
 
         <!-- Create Entry Button (Admin Only) -->
         <div class="mb-3" th:if="${user.isAdmin() and isPrimary}">
-            <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#createModal">
+            <a th:href="@{/entry/create(region=${region})}" class="btn btn-success">
                 <i class="bi bi-plus-circle"></i> Create New Entry
-            </button>
+            </a>
         </div>
 
         <!-- Keys List -->
@@ -87,48 +87,6 @@
                             <a th:href="@{/region/{name}(name=${region},pattern='*')}" class="alert-link">view all keys</a>
                         </small>
                     </p>
-                </div>
-            </div>
-        </div>
-
-        <!-- Create Entry Modal -->
-        <div class="modal fade" id="createModal" tabindex="-1">
-            <div class="modal-dialog">
-                <div class="modal-content">
-                    <form th:action="@{/entry/create}" method="post">
-                        <input type="hidden" name="region" th:value="${region}">
-                        <div class="modal-header">
-                            <h5 class="modal-title">Create New Entry in <span th:text="${region}">region0</span></h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                        </div>
-                        <div class="modal-body">
-                            <div class="mb-3">
-                                <label for="key" class="form-label">Key</label>
-                                <input type="text" class="form-control" id="key" name="key"
-                                       placeholder="e.g., user:123, session:abc" required>
-                                <div class="form-text">
-                                    Key must be unique within this region.
-                                </div>
-                            </div>
-                            <div class="mb-3">
-                                <label for="value" class="form-label">Value</label>
-                                <textarea class="form-control" id="value" name="value" rows="4"
-                                          placeholder="Enter value (can be any text or JSON)" required></textarea>
-                            </div>
-                            <div class="mb-3">
-                                <label for="ttl" class="form-label">TTL (Time To Live)</label>
-                                <input type="number" class="form-control" id="ttl" name="ttl"
-                                       min="0" placeholder="0 (no expiration)">
-                                <div class="form-text">
-                                    Time in seconds. Leave as 0 for no expiration.
-                                </div>
-                            </div>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                            <button type="submit" class="btn btn-success">Create Entry</button>
-                        </div>
-                    </form>
                 </div>
             </div>
         </div>

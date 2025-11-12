@@ -205,6 +205,33 @@ public class WebController {
         return "entry-detail";
     }
 
+    @GetMapping("/entry/create")
+    public String showCreateEntryPage(@RequestParam String region,
+                                      HttpSession session,
+                                      Model model,
+                                      RedirectAttributes redirectAttributes) {
+        User user = (User) session.getAttribute("user");
+        if (user == null) {
+            return "redirect:/login";
+        }
+
+        if (!userService.isAdmin(user)) {
+            redirectAttributes.addFlashAttribute("error", "Only admins can create entries");
+            return "redirect:/region/" + region;
+        }
+
+        if (replicationService != null && !replicationService.isPrimary()) {
+            redirectAttributes.addFlashAttribute("error", "Cannot modify data on secondary instance");
+            return "redirect:/region/" + region;
+        }
+
+        model.addAttribute("user", user);
+        model.addAttribute("region", region);
+        model.addAttribute("isPrimary", replicationService == null || replicationService.isPrimary());
+
+        return "create-entry";
+    }
+
     @PostMapping("/entry/create")
     public String createEntry(@RequestParam String region,
                               @RequestParam String key,
