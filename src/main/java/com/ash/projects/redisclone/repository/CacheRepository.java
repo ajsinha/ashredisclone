@@ -1,208 +1,165 @@
 package com.ash.projects.redisclone.repository;
 
 import com.ash.projects.redisclone.model.CacheEntry;
-import com.ash.projects.redisclone.model.DataType;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.RowMapper;
-import org.springframework.stereotype.Repository;
-
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.util.List;
 
-@Repository
-public class CacheRepository {
+/**
+ * Delegating implementation of CacheRepositoryInterface.
+ * This class delegates all operations to either CacheRepositorySQL or CacheRepositoryRocksDB
+ * based on the application configuration.
+ * 
+ * The actual implementation is injected via constructor and determined by 
+ * CacheRepositoryConfig based on the "cache.repository.type" property.
+ * 
+ * This pattern allows for:
+ * 1. Easy switching between SQL and RocksDB implementations
+ * 2. Single point of dependency injection for services
+ * 3. No code changes required in services when switching implementations
+ * 4. Config-driven repository selection
+ * 
+ * IMPORTANT: This class is NOT annotated with @Repository.
+ * It is managed as a bean by CacheRepositoryConfig with @Primary annotation.
+ * This prevents circular dependencies and ensures proper bean creation order.
+ * 
+ * @author ajsinha@gmail.com
+ * Copyright (c) 2025 Ash Sinha. All rights reserved.
+ */
+public class CacheRepository implements CacheRepositoryInterface {
 
     private static final Logger logger = LoggerFactory.getLogger(CacheRepository.class);
+    
+    private final CacheRepositoryInterface delegate;
+    private final String implementationType;
 
-    @Autowired
-    private JdbcTemplate jdbcTemplate;
-
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    /**
+     * Constructor with delegate injection
+     * 
+     * @param delegate The actual repository implementation (SQL or RocksDB)
+     * @param implementationType The type name for logging (e.g., "SQL" or "RocksDB")
+     */
+    public CacheRepository(CacheRepositoryInterface delegate, String implementationType) {
+        if (delegate == null) {
+            throw new IllegalArgumentException("Delegate repository cannot be null");
+        }
+        this.delegate = delegate;
+        this.implementationType = implementationType;
+        logger.info("CacheRepository initialized with {} implementation", implementationType);
+    }
 
     @PostConstruct
+    @Override
     public void initializeDatabase() {
-        logger.info("Initializing database schema");
-
-        String createTableSql = """
-            CREATE TABLE IF NOT EXISTS cache_entries (
-                region TEXT NOT NULL,
-                key TEXT NOT NULL,
-                data_type TEXT NOT NULL,
-                value_data TEXT,
-                created_at INTEGER NOT NULL,
-                last_accessed_at INTEGER NOT NULL,
-                expires_at INTEGER,
-                in_memory INTEGER DEFAULT 0,
-                PRIMARY KEY (region, key)
-            )
-            """;
-
-        jdbcTemplate.execute(createTableSql);
-
-        // Create indexes
-        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_region ON cache_entries(region)");
-        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_expires_at ON cache_entries(expires_at)");
-
-        logger.info("Database schema initialized");
+        logger.info("Initializing {} cache repository", implementationType);
+        delegate.initializeDatabase();
+        logger.info("{} cache repository initialized successfully", implementationType);
     }
 
+    @Override
     public void saveEntry(CacheEntry entry) {
-        try {
-            String valueJson = objectMapper.writeValueAsString(entry.getValue());
-
-            String sql = """
-                INSERT OR REPLACE INTO cache_entries 
-                (region, key, data_type, value_data, created_at, last_accessed_at, expires_at, in_memory)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """;
-
-            jdbcTemplate.update(sql,
-                    entry.getRegion(),
-                    entry.getKey(),
-                    entry.getDataType().name(),
-                    valueJson,
-                    entry.getCreatedAt(),
-                    entry.getLastAccessedAt(),
-                    entry.getExpiresAt(),
-                    entry.isInMemory() ? 1 : 0
-            );
-
-        } catch (Exception e) {
-            logger.error("Error saving entry: region={}, key={}", entry.getRegion(), entry.getKey(), e);
-        }
+        delegate.saveEntry(entry);
     }
 
+    @Override
     public CacheEntry loadEntry(String region, String key) {
-        try {
-            String sql = "SELECT * FROM cache_entries WHERE region = ? AND key = ?";
-
-            List<CacheEntry> results = jdbcTemplate.query(sql, new CacheEntryRowMapper(), region, key);
-
-            return results.isEmpty() ? null : results.get(0);
-
-        } catch (Exception e) {
-            logger.error("Error loading entry: region={}, key={}", region, key, e);
-            return null;
-        }
+        return delegate.loadEntry(region, key);
     }
 
+    @Override
     public List<CacheEntry> loadAllEntries() {
-        try {
-            String sql = "SELECT * FROM cache_entries";
-            return jdbcTemplate.query(sql, new CacheEntryRowMapper());
-        } catch (Exception e) {
-            logger.error("Error loading all entries", e);
-            return List.of();
-        }
+        return delegate.loadAllEntries();
     }
 
+    @Override
     public List<CacheEntry> loadEntriesByRegion(String region) {
-        try {
-            String sql = "SELECT * FROM cache_entries WHERE region = ?";
-            return jdbcTemplate.query(sql, new CacheEntryRowMapper(), region);
-        } catch (Exception e) {
-            logger.error("Error loading entries for region: {}", region, e);
-            return List.of();
-        }
+        return delegate.loadEntriesByRegion(region);
     }
 
+    @Override
     public void deleteEntry(String region, String key) {
-        try {
-            String sql = "DELETE FROM cache_entries WHERE region = ? AND key = ?";
-            jdbcTemplate.update(sql, region, key);
-        } catch (Exception e) {
-            logger.error("Error deleting entry: region={}, key={}", region, key, e);
-        }
+        delegate.deleteEntry(region, key);
     }
 
+    @Override
     public void deleteRegion(String region) {
-        try {
-            String sql = "DELETE FROM cache_entries WHERE region = ?";
-            jdbcTemplate.update(sql, region);
-        } catch (Exception e) {
-            logger.error("Error deleting region: {}", region, e);
-        }
+        delegate.deleteRegion(region);
     }
 
+    @Override
     public void updateExpiry(String region, String key, Long expiresAt) {
-        try {
-            String sql = "UPDATE cache_entries SET expires_at = ? WHERE region = ? AND key = ?";
-            jdbcTemplate.update(sql, expiresAt, region, key);
-        } catch (Exception e) {
-            logger.error("Error updating expiry: region={}, key={}", region, key, e);
-        }
+        delegate.updateExpiry(region, key, expiresAt);
     }
 
+    @Override
     public void deleteExpiredEntries() {
-        try {
-            String sql = "DELETE FROM cache_entries WHERE expires_at IS NOT NULL AND expires_at < ?";
-            int deleted = jdbcTemplate.update(sql, System.currentTimeMillis());
-
-            if (deleted > 0) {
-                logger.info("Deleted {} expired entries from database", deleted);
-            }
-        } catch (Exception e) {
-            logger.error("Error deleting expired entries", e);
-        }
+        delegate.deleteExpiredEntries();
     }
 
+    @Override
     public long getEntryCount(String region) {
-        try {
-            String sql = "SELECT COUNT(*) FROM cache_entries WHERE region = ?";
-            Long count = jdbcTemplate.queryForObject(sql, Long.class, region);
-            return count != null ? count : 0;
-        } catch (Exception e) {
-            logger.error("Error getting entry count for region: {}", region, e);
-            return 0;
-        }
+        return delegate.getEntryCount(region);
     }
 
-    private class CacheEntryRowMapper implements RowMapper<CacheEntry> {
-        @Override
-        public CacheEntry mapRow(ResultSet rs, int rowNum) throws SQLException {
-            CacheEntry entry = new CacheEntry();
-            entry.setRegion(rs.getString("region"));
-            entry.setKey(rs.getString("key"));
-            entry.setDataType(DataType.valueOf(rs.getString("data_type")));
-            entry.setCreatedAt(rs.getLong("created_at"));
-            entry.setLastAccessedAt(rs.getLong("last_accessed_at"));
+    /**
+     * Get the underlying delegate (for advanced use cases)
+     * This allows access to implementation-specific methods
+     * 
+     * @return The underlying repository implementation
+     */
+    public CacheRepositoryInterface getDelegate() {
+        return delegate;
+    }
 
-            long expiresAt = rs.getLong("expires_at");
-            entry.setExpiresAt(rs.wasNull() ? null : expiresAt);
+    /**
+     * Get the type of repository implementation
+     * 
+     * @return "SQL" or "RocksDB"
+     */
+    public String getImplementationType() {
+        return implementationType;
+    }
 
-            entry.setInMemory(rs.getInt("in_memory") == 1);
+    /**
+     * Check if the current implementation is SQL-based
+     * 
+     * @return true if using SQL implementation
+     */
+    public boolean isSqlImplementation() {
+        return delegate instanceof CacheRepositorySQL;
+    }
 
-            // Deserialize value based on data type
-            String valueJson = rs.getString("value_data");
-            try {
-                Object value = deserializeValue(valueJson, entry.getDataType());
-                entry.setValue(value);
-            } catch (Exception e) {
-                logger.error("Error deserializing value for key: {}", entry.getKey(), e);
-            }
+    /**
+     * Check if the current implementation is RocksDB-based
+     * 
+     * @return true if using RocksDB implementation
+     */
+    public boolean isRocksDbImplementation() {
+        return delegate instanceof CacheRepositoryRocksDB;
+    }
 
-            return entry;
+    /**
+     * Get the SQL repository if available (for migration scenarios)
+     * 
+     * @return CacheRepositorySQL instance or null
+     */
+    public CacheRepositorySQL getSqlRepository() {
+        if (delegate instanceof CacheRepositorySQL) {
+            return (CacheRepositorySQL) delegate;
         }
+        return null;
+    }
 
-        private Object deserializeValue(String json, DataType dataType) throws Exception {
-            return switch (dataType) {
-                case STRING -> objectMapper.readValue(json, String.class);
-                case HASH -> objectMapper.readValue(json, objectMapper.getTypeFactory()
-                        .constructMapType(java.util.HashMap.class, String.class, String.class));
-                case LIST -> objectMapper.readValue(json, objectMapper.getTypeFactory()
-                        .constructCollectionType(java.util.ArrayList.class, String.class));
-                case SET -> objectMapper.readValue(json, objectMapper.getTypeFactory()
-                        .constructCollectionType(java.util.HashSet.class, String.class));
-                case SORTED_SET -> objectMapper.readValue(json, objectMapper.getTypeFactory()
-                        .constructCollectionType(java.util.TreeSet.class,
-                                com.ash.projects.redisclone.model.SortedSetEntry.class));
-            };
+    /**
+     * Get the RocksDB repository if available (for advanced features)
+     * 
+     * @return CacheRepositoryRocksDB instance or null
+     */
+    public CacheRepositoryRocksDB getRocksDbRepository() {
+        if (delegate instanceof CacheRepositoryRocksDB) {
+            return (CacheRepositoryRocksDB) delegate;
         }
+        return null;
     }
 }

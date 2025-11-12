@@ -1,7 +1,8 @@
 package com.ash.projects.redisclone.service;
 
 import com.ash.projects.redisclone.model.*;
-import com.ash.projects.redisclone.repository.CacheRepository;
+import com.ash.projects.redisclone.repository.CacheRepositoryInterface;
+import com.ash.projects.redisclone.repository.CacheRepositorySQL;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -9,7 +10,6 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.stream.Collectors;
 
 /**
  * Extended cache operations for Hash, List, Set, and Sorted Set data types
@@ -21,7 +21,7 @@ public class ExtendedCacheService {
     private CacheService cacheService;
 
     @Autowired
-    private CacheRepository cacheRepository;
+    private CacheRepositoryInterface cacheRepository;
 
     private final Map<String, ReadWriteLock> typeLocks = new ConcurrentHashMap<>();
 

@@ -1,7 +1,11 @@
 package com.ash.projects.redisclone.service;
 
 import com.ash.projects.redisclone.model.*;
-import com.ash.projects.redisclone.repository.CacheRepository;
+import com.ash.projects.redisclone.repository.CacheRepositoryInterface;
+// CHANGED: Import interface instead of concrete implementation
+// OLD: import com.ash.projects.redisclone.repository.CacheRepositorySQL;
+// NEW: import com.ash.projects.redisclone.repository.CacheRepositoryInterface;
+
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
@@ -14,12 +18,24 @@ import org.springframework.stereotype.Service;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+/**
+ * Cache Service - Updated to use config-driven repository
+ * 
+ * CHANGES FROM ORIGINAL:
+ * - Line 4: Changed from CacheRepositorySQL to CacheRepositoryInterface
+ * - Line 34: Inject CacheRepositoryInterface instead of CacheRepositorySQL
+ * 
+ * The actual implementation (SQL or RocksDB) is determined by application configuration.
+ * No other code changes are required!
+ * 
+ * @author ajsinha@gmail.com
+ * Copyright (c) 2025 Ash Sinha. All rights reserved.
+ */
 @Service
 public class CacheService {
 
@@ -31,8 +47,10 @@ public class CacheService {
     @Value("${cache.default.region:region0}")
     private String defaultRegion;
 
+    // CHANGED: Inject interface instead of concrete implementation
     @Autowired
-    private CacheRepository cacheRepository;
+    private CacheRepositoryInterface cacheRepository;
+    // OLD: private CacheRepositorySQL cacheRepository;
 
     @Lazy
     @Autowired(required = false)
@@ -242,7 +260,7 @@ public class CacheService {
         lock.writeLock().lock();
         try {
             CacheEntry entry = getEntry(region, key);
-            if (entry == null || entry.isExpired()) {
+            if (entry == null) {
                 return false;
             }
 
