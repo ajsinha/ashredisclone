@@ -2,6 +2,94 @@
 <html xmlns:th="http://www.thymeleaf.org">
 <head>
     <title th:text="'Region: ' + ${region}">Region Detail - AshRedis</title>
+    <style>
+        .refresh-controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .countdown-badge {
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            min-width: 80px;
+            text-align: center;
+        }
+
+        /* iOS-style Toggle Switch */
+        .toggle-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .toggle-label {
+            font-size: 0.95rem;
+            font-weight: 500;
+            color: #495057;
+            user-select: none;
+        }
+
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 56px;
+            height: 32px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: 0.3s;
+            border-radius: 32px;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 26px;
+            width: 26px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: 0.3s;
+            border-radius: 50%;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        input:checked + .toggle-slider {
+            background-color: #34c759; /* iOS green */
+        }
+
+        input:checked + .toggle-slider:before {
+            transform: translateX(24px);
+        }
+
+        input:focus + .toggle-slider {
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1), 0 0 0 3px rgba(52, 199, 89, 0.2);
+        }
+
+        /* Hover effect */
+        .toggle-slider:hover {
+            background-color: #bbb;
+        }
+
+        input:checked + .toggle-slider:hover {
+            background-color: #30b350;
+        }
+    </style>
 </head>
 <body>
 <th:block th:replace="~{base :: layout(~{::title}, ~{::main})}">
@@ -13,7 +101,25 @@
                     <span class="badge bg-info" th:text="${keys.size()} + ' keys'">0 keys</span>
                 </p>
             </div>
-            <div>
+            <div class="d-flex gap-2 align-items-center">
+                <!-- Auto-refresh Controls -->
+                <div class="refresh-controls">
+                    <div class="toggle-container">
+                        <span class="toggle-label">
+                            <i class="bi bi-arrow-clockwise"></i> Auto-Refresh
+                        </span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="autoRefreshToggle" onchange="toggleAutoRefresh()">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <span id="countdownBadge"
+                          class="badge bg-secondary countdown-badge"
+                          style="display: none;">
+                        <i class="bi bi-clock"></i> <span id="countdownValue">30</span>s
+                    </span>
+                </div>
+
                 <a th:href="@{/regions}" class="btn btn-secondary">
                     <i class="bi bi-arrow-left"></i> Back to Regions
                 </a>
@@ -115,6 +221,9 @@
 <!-- Enhanced Table JavaScript -->
 <script th:src="@{/js/table-utils.js}"></script>
 <script th:inline="javascript">
+    // Get current pattern from server
+    const currentPattern = /*[[${pattern}]]*/ '*';
+
     // Initialize enhanced table
     document.addEventListener('DOMContentLoaded', function() {
         const keysTable = document.getElementById('keysTable');
@@ -126,6 +235,9 @@
                 sortable: true
             });
         }
+
+        // Initialize auto-refresh state from localStorage
+        initAutoRefresh();
     });
 
     // Delete confirmation
@@ -139,6 +251,126 @@
             document.getElementById('deleteEntryForm').submit();
         }
     }
+
+    // Auto-refresh functionality
+    let autoRefreshEnabled = false;
+    let countdownInterval = null;
+    let refreshInterval = null;
+    let remainingSeconds = 30;
+    const REFRESH_INTERVAL = 30; // seconds
+
+    function initAutoRefresh() {
+        // Load saved state from localStorage
+        const savedState = localStorage.getItem('regionDetailAutoRefresh');
+        if (savedState === 'true') {
+            enableAutoRefresh();
+        }
+    }
+
+    function toggleAutoRefresh() {
+        const toggle = document.getElementById('autoRefreshToggle');
+        if (toggle.checked) {
+            enableAutoRefresh();
+        } else {
+            disableAutoRefresh();
+        }
+    }
+
+    function enableAutoRefresh() {
+        autoRefreshEnabled = true;
+        remainingSeconds = REFRESH_INTERVAL;
+
+        // Update UI
+        document.getElementById('autoRefreshToggle').checked = true;
+        document.getElementById('countdownBadge').style.display = 'inline-block';
+
+        // Save state
+        localStorage.setItem('regionDetailAutoRefresh', 'true');
+
+        // Start countdown
+        startCountdown();
+
+        // Start refresh interval
+        refreshInterval = setInterval(function() {
+            // Preserve the pattern parameter when refreshing
+            if (currentPattern && currentPattern !== '*') {
+                window.location.href = window.location.pathname + '?pattern=' + encodeURIComponent(currentPattern);
+            } else {
+                window.location.reload();
+            }
+        }, REFRESH_INTERVAL * 1000);
+    }
+
+    function disableAutoRefresh() {
+        autoRefreshEnabled = false;
+
+        // Update UI
+        document.getElementById('autoRefreshToggle').checked = false;
+        document.getElementById('countdownBadge').style.display = 'none';
+
+        // Save state
+        localStorage.setItem('regionDetailAutoRefresh', 'false');
+
+        // Clear intervals
+        if (countdownInterval) {
+            clearInterval(countdownInterval);
+            countdownInterval = null;
+        }
+        if (refreshInterval) {
+            clearInterval(refreshInterval);
+            refreshInterval = null;
+        }
+    }
+
+    function startCountdown() {
+        // Clear existing countdown if any
+        if (countdownInterval) {
+            clearInterval(countdownInterval);
+        }
+
+        // Update countdown display
+        updateCountdownDisplay();
+
+        // Start new countdown
+        countdownInterval = setInterval(function() {
+            remainingSeconds--;
+
+            if (remainingSeconds <= 0) {
+                remainingSeconds = REFRESH_INTERVAL;
+            }
+
+            updateCountdownDisplay();
+        }, 1000);
+    }
+
+    function updateCountdownDisplay() {
+        const countdownValue = document.getElementById('countdownValue');
+        if (countdownValue) {
+            countdownValue.textContent = remainingSeconds;
+
+            // Change badge color based on time remaining
+            const badge = document.getElementById('countdownBadge');
+            badge.className = 'badge countdown-badge';
+
+            if (remainingSeconds <= 5) {
+                badge.classList.add('bg-danger');
+            } else if (remainingSeconds <= 10) {
+                badge.classList.add('bg-warning', 'text-dark');
+            } else {
+                badge.classList.add('bg-secondary');
+            }
+        }
+    }
+
+    // Clean up on page unload
+    window.addEventListener('beforeunload', function() {
+        if (countdownInterval) {
+            clearInterval(countdownInterval);
+        }
+        if (refreshInterval) {
+            clearInterval(refreshInterval);
+        }
+    });
 </script>
 </body>
 </html>
