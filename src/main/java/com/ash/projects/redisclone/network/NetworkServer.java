@@ -91,7 +91,7 @@ public class NetworkServer {
         public void messageReceived(IoSession session, Object message) {
             String command = (String) message;
             logger.debug("Received command: {}", command);
-
+            //System.out.println("Command: ["+command+"]");
             try {
                 String response = processCommand(command);
                 session.write(response);
@@ -108,7 +108,7 @@ public class NetworkServer {
         }
 
         private String processCommand(String commandLine) {
-            String[] parts = commandLine.trim().split("\\s+");
+            String[] parts = parseCommandLine(commandLine.trim());
             if (parts.length == 0) {
                 return "-ERR empty command";
             }
@@ -139,6 +139,117 @@ public class NetworkServer {
                 case "INFO" -> handleInfo();
                 default -> "-ERR unknown command '" + cmd + "'";
             };
+        }
+
+        /**
+         * Parse command line respecting quoted strings with escape sequences
+         *
+         * Features:
+         * - Handles both single (') and double (") quotes
+         * - Supports escaped quotes: \" and \'
+         * - Supports escaped backslash: \\
+         * - Supports escape sequences: \n, \r, \t
+         * - Preserves all whitespace within quotes
+         * - Handles large strings (e.g., JSON payloads)
+         * - Validates quote closure
+         *
+         * Examples:
+         * - SET key "Hello World" -> ["SET", "key", "Hello World"]
+         * - SET "my key" "value" -> ["SET", "my key", "value"]
+         * - SET key "{\"name\": \"John\"}" -> ["SET", "key", "{\"name\": \"John\"}"]
+         * - SET key "He said \"Hi\"" -> ["SET", "key", "He said \"Hi\""]
+         *
+         * @param commandLine The command line to parse
+         * @return Array of parsed arguments
+         * @throws IllegalArgumentException if quotes are not properly closed
+         */
+        private String[] parseCommandLine(String commandLine) {
+            java.util.List<String> parts = new java.util.ArrayList<>();
+            StringBuilder current = new StringBuilder();
+            boolean inQuotes = false;
+            char quoteChar = '\0';
+
+            for (int i = 0; i < commandLine.length(); i++) {
+                char c = commandLine.charAt(i);
+
+                // Handle escape sequences
+                if (c == '\\' && i + 1 < commandLine.length()) {
+                    char next = commandLine.charAt(i + 1);
+
+                    // If in quotes, process escape sequences
+                    if (inQuotes) {
+                        switch (next) {
+                            case '"':
+                            case '\'':
+                            case '\\':
+                                // Escaped quote or backslash - add the escaped character
+                                current.append(next);
+                                i++; // Skip next character
+                                continue;
+                            case 'n':
+                                current.append('\n');
+                                i++;
+                                continue;
+                            case 'r':
+                                current.append('\r');
+                                i++;
+                                continue;
+                            case 't':
+                                current.append('\t');
+                                i++;
+                                continue;
+                            default:
+                                // Unknown escape sequence - keep the backslash
+                                current.append(c);
+                                continue;
+                        }
+                    } else {
+                        // Outside quotes, backslash is literal unless it's before a quote
+                        if (next == '"' || next == '\'') {
+                            // This is an escaped quote outside of quotes - unusual but handle it
+                            current.append(next);
+                            i++;
+                            continue;
+                        } else {
+                            current.append(c);
+                            continue;
+                        }
+                    }
+                }
+
+                // Handle quote characters
+                if (!inQuotes && (c == '"' || c == '\'')) {
+                    // Start of quoted string
+                    inQuotes = true;
+                    quoteChar = c;
+                } else if (inQuotes && c == quoteChar) {
+                    // End of quoted string (only if it matches the opening quote)
+                    inQuotes = false;
+                    quoteChar = '\0';
+                } else if (!inQuotes && Character.isWhitespace(c)) {
+                    // Whitespace outside quotes - delimiter
+                    if (current.length() > 0) {
+                        parts.add(current.toString());
+                        current = new StringBuilder();
+                    }
+                } else {
+                    // Regular character (including quotes that don't match)
+                    current.append(c);
+                }
+            }
+
+            // Add last part if any
+            if (current.length() > 0) {
+                parts.add(current.toString());
+            }
+
+            // Validate that all quotes are closed
+            if (inQuotes) {
+                logger.warn("Unclosed quote in command: {}", commandLine);
+                throw new IllegalArgumentException("Unclosed quote in command");
+            }
+
+            return parts.toArray(new String[0]);
         }
 
         private String handleSet(String region, String[] parts, int start) {

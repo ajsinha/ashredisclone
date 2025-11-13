@@ -27,6 +27,9 @@ public class WebController {
 
     private static final Logger logger = LoggerFactory.getLogger(WebController.class);
 
+    // Maximum number of keys to display on region detail page
+    private static final int MAX_KEYS_DISPLAY = 10000;
+
     @Autowired
     private UserService userService;
 
@@ -217,50 +220,35 @@ public class WebController {
                 return "redirect:/region/create";
             }
 
-            // Log region creation
-            logger.info("User {} creating region: {}", user.getUserid(), regionName);
-
-            // Create region and check if initial entry is provided
-            boolean entryCreated = false;
-
-            if (key != null && !key.trim().isEmpty() &&
-                    value != null && !value.trim().isEmpty()) {
-
-                logger.info("Creating initial entry in region {}: key={}, ttl={}",
-                        regionName, key, ttl);
-
-                // Set the cache entry with or without TTL
-                if (ttl > 0) {
-                    Long expiresAt = System.currentTimeMillis() + (ttl * 1000L);
-                    cacheService.set(regionName, key, value, expiresAt);
-                    logger.info("Entry created with TTL: {} seconds", ttl);
-                } else {
-                    cacheService.set(regionName, key, value, null);
-                    logger.info("Entry created with no expiration");
-                }
-
-                entryCreated = true;
-            } else {
-                // Create region with a dummy key and then delete it
-                String dummyKey = "__region_init__";
-                cacheService.set(regionName, dummyKey, "initialized", null);
-                cacheService.del(regionName, dummyKey);
-                logger.info("Region created without initial entry");
+            // Check if region already exists
+            if (cacheService.getAllRegions().contains(regionName)) {
+                redirectAttributes.addFlashAttribute("error",
+                        "Region '" + regionName + "' already exists");
+                return "redirect:/region/create";
             }
 
-            // Set success message
-            if (entryCreated) {
+            logger.info("Creating new region '{}' by user {}", regionName, user.getUserid());
+
+            // Create region by adding a dummy entry then removing it
+            // This ensures the region is initialized in all data structures
+            String dummyKey = "__init__" + System.currentTimeMillis();
+            cacheService.set(regionName, dummyKey, "initializing", null);
+            cacheService.del(regionName, dummyKey);
+
+            logger.info("Region '{}' created successfully", regionName);
+
+            // If initial entry is provided, add it
+            if (key != null && !key.trim().isEmpty() && value != null && !value.trim().isEmpty()) {
+                Long expiresAt = ttl > 0 ? System.currentTimeMillis() + (ttl * 1000L) : null;
+                cacheService.set(regionName, key, value, expiresAt);
+
+                logger.info("Added initial entry to region '{}': key={}, ttl={}", regionName, key, ttl);
                 redirectAttributes.addFlashAttribute("success",
-                        String.format("Region '%s' created successfully with initial entry '%s'",
-                                regionName, key));
+                        "Region '" + regionName + "' created successfully with initial entry");
             } else {
                 redirectAttributes.addFlashAttribute("success",
-                        String.format("Region '%s' created successfully", regionName));
+                        "Region '" + regionName + "' created successfully");
             }
-
-            // Log the successful operation
-            logger.info("Region '{}' created successfully by user {}",
-                    regionName, user.getUserid());
 
             // Redirect to the new region's detail page
             return "redirect:/region/" + regionName;
@@ -309,13 +297,7 @@ public class WebController {
         }
 
         if (replicationService != null && !replicationService.isPrimary()) {
-            redirectAttributes.addFlashAttribute("error", "Cannot delete region on secondary instance");
-            return "redirect:/regions";
-        }
-
-        // Prevent deletion of default region
-        if (cacheService.getDefaultRegion().equals(regionName)) {
-            redirectAttributes.addFlashAttribute("error", "Cannot delete default region");
+            redirectAttributes.addFlashAttribute("error", "Cannot delete regions on secondary instance");
             return "redirect:/regions";
         }
 
@@ -333,6 +315,10 @@ public class WebController {
         return "redirect:/regions";
     }
 
+    /**
+     * UPDATED: Display region detail with key limit
+     * Shows at most 25,000 keys and indicates if more keys are available
+     */
     @GetMapping("/region/{name}")
     public String regionDetail(@PathVariable String name,
                                @RequestParam(required = false, defaultValue = "*") String pattern,
@@ -343,12 +329,31 @@ public class WebController {
             return "redirect:/login";
         }
 
-        Set<String> keys = cacheService.keys(name, pattern);
+        // Get all matching keys
+        Set<String> allMatchingKeys = cacheService.keys(name, pattern);
+
+        // Check if there are more keys than the display limit
+        boolean hasMoreKeys = allMatchingKeys.size() > MAX_KEYS_DISPLAY;
+
+        // Limit keys to MAX_KEYS_DISPLAY
+        Set<String> displayKeys;
+        if (hasMoreKeys) {
+            displayKeys = allMatchingKeys.stream()
+                    .limit(MAX_KEYS_DISPLAY)
+                    .collect(java.util.stream.Collectors.toSet());
+            logger.info("Region '{}' has {} keys matching pattern '{}', displaying first {}",
+                    name, allMatchingKeys.size(), pattern, MAX_KEYS_DISPLAY);
+        } else {
+            displayKeys = allMatchingKeys;
+        }
 
         model.addAttribute("user", user);
         model.addAttribute("region", name);
         model.addAttribute("pattern", pattern);
-        model.addAttribute("keys", keys);
+        model.addAttribute("keys", displayKeys);
+        model.addAttribute("hasMoreKeys", hasMoreKeys);
+        model.addAttribute("totalKeyCount", allMatchingKeys.size());
+        model.addAttribute("displayedKeyCount", displayKeys.size());
         model.addAttribute("isPrimary", replicationService == null || replicationService.isPrimary());
 
         return "region-detail";
@@ -387,18 +392,16 @@ public class WebController {
         }
 
         if (!userService.isAdmin(user)) {
-            model.addAttribute("error", "Only admins can create entries");
             return "redirect:/region/" + region;
         }
 
         if (replicationService != null && !replicationService.isPrimary()) {
-            model.addAttribute("error", "Cannot create entries on secondary instance");
             return "redirect:/region/" + region;
         }
 
         model.addAttribute("user", user);
         model.addAttribute("region", region);
-        model.addAttribute("isPrimary", replicationService == null || replicationService.isPrimary());
+        model.addAttribute("isPrimary", true);
 
         return "create-entry";
     }
@@ -407,7 +410,7 @@ public class WebController {
     public String createEntry(@RequestParam String region,
                               @RequestParam String key,
                               @RequestParam String value,
-                              @RequestParam(required = false) Long ttl,
+                              @RequestParam(required = false) Integer ttl,
                               HttpSession session,
                               RedirectAttributes redirectAttributes) {
         User user = (User) session.getAttribute("user");
@@ -425,7 +428,7 @@ public class WebController {
             return "redirect:/region/" + region;
         }
 
-        Long expiresAt = ttl != null && ttl > 0 ? System.currentTimeMillis() + (ttl * 1000) : null;
+        Long expiresAt = ttl != null && ttl > 0 ? System.currentTimeMillis() + (ttl * 1000L) : null;
         cacheService.set(region, key, value, expiresAt);
 
         redirectAttributes.addFlashAttribute("success", "Entry created successfully");
@@ -433,11 +436,11 @@ public class WebController {
     }
 
     @GetMapping("/entry/edit")
-    public String editEntryPage(@RequestParam String region,
-                                @RequestParam String key,
-                                HttpSession session,
-                                Model model,
-                                RedirectAttributes redirectAttributes) {
+    public String editEntry(@RequestParam String region,
+                            @RequestParam String key,
+                            HttpSession session,
+                            Model model,
+                            RedirectAttributes redirectAttributes) {
         User user = (User) session.getAttribute("user");
         if (user == null) {
             return "redirect:/login";
@@ -449,7 +452,7 @@ public class WebController {
         }
 
         if (replicationService != null && !replicationService.isPrimary()) {
-            redirectAttributes.addFlashAttribute("error", "Cannot modify data on secondary instance");
+            redirectAttributes.addFlashAttribute("error", "Cannot edit entries on secondary instance");
             return "redirect:/entry/" + region + "/" + key;
         }
 

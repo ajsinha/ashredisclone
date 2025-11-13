@@ -17,6 +17,11 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * RocksDB-based implementation of CacheRepositoryInterface.
@@ -24,7 +29,7 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * NOTE: This class is NOT annotated with @Repository.
  * It's managed as a bean by CacheRepositoryConfig based on configuration.
- * 
+ *
  * @author ajsinha@gmail.com
  * Copyright (c) 2025 Ash Sinha. All rights reserved.
  */
@@ -35,6 +40,15 @@ public class CacheRepositoryRocksDB implements CacheRepositoryInterface {
 
     @Value("${cache.rocksdb.base.path:./data/rocksdb}")
     private String baseRocksDbPath;
+
+    @Value("${cache.rocksdb.parallel.loading.enabled:true}")
+    private boolean parallelLoadingEnabled;
+
+    @Value("${cache.rocksdb.parallel.loading.threads:4}")
+    private int parallelLoadingThreads;
+
+    @Value("${cache.rocksdb.parallel.loading.timeout.seconds:300}")
+    private int parallelLoadingTimeoutSeconds;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final Map<String, RocksDB> regionDatabases = new ConcurrentHashMap<>();
@@ -83,6 +97,7 @@ public class CacheRepositoryRocksDB implements CacheRepositoryInterface {
 
     /**
      * Load existing region databases from disk
+     * Uses parallel loading if enabled for faster startup
      */
     private void loadExistingRegions() {
         try {
@@ -92,19 +107,119 @@ public class CacheRepositoryRocksDB implements CacheRepositoryInterface {
             }
 
             File[] regionDirs = baseDir.listFiles(File::isDirectory);
-            if (regionDirs != null) {
-                for (File regionDir : regionDirs) {
-                    String regionName = regionDir.getName();
-                    try {
-                        getOrCreateRegionDb(regionName);
-                        logger.info("Loaded existing region: {}", regionName);
-                    } catch (Exception e) {
-                        logger.error("Failed to load region: {}", regionName, e);
-                    }
-                }
+            if (regionDirs == null || regionDirs.length == 0) {
+                logger.info("No existing regions found");
+                return;
             }
+
+            if (parallelLoadingEnabled && regionDirs.length > 1) {
+                loadRegionsInParallel(regionDirs);
+            } else {
+                loadRegionsSequentially(regionDirs);
+            }
+
         } catch (Exception e) {
             logger.error("Error loading existing regions", e);
+        }
+    }
+
+    /**
+     * Load regions sequentially (original method)
+     */
+    private void loadRegionsSequentially(File[] regionDirs) {
+        logger.info("Loading {} regions sequentially...", regionDirs.length);
+        long startTime = System.currentTimeMillis();
+
+        int successCount = 0;
+        int failureCount = 0;
+
+        for (File regionDir : regionDirs) {
+            String regionName = regionDir.getName();
+            try {
+                getOrCreateRegionDb(regionName);
+                logger.info("Loaded existing region: {}", regionName);
+                successCount++;
+            } catch (Exception e) {
+                logger.error("Failed to load region: {}", regionName, e);
+                failureCount++;
+            }
+        }
+
+        long duration = System.currentTimeMillis() - startTime;
+        logger.info("Sequential loading completed: {} successful, {} failed in {}ms",
+                successCount, failureCount, duration);
+    }
+
+    /**
+     * Load regions in parallel using thread pool for faster startup
+     */
+    private void loadRegionsInParallel(File[] regionDirs) {
+        int threadCount = Math.min(parallelLoadingThreads, regionDirs.length);
+        logger.info("Loading {} regions in parallel using {} threads...",
+                regionDirs.length, threadCount);
+
+        long startTime = System.currentTimeMillis();
+        ExecutorService executor = Executors.newFixedThreadPool(
+                threadCount,
+                r -> {
+                    Thread t = new Thread(r);
+                    t.setName("RocksDB-Region-Loader-" + t.getId());
+                    t.setDaemon(true);
+                    return t;
+                }
+        );
+
+        CountDownLatch latch = new CountDownLatch(regionDirs.length);
+        AtomicInteger successCount = new AtomicInteger(0);
+        AtomicInteger failureCount = new AtomicInteger(0);
+
+        try {
+            // Submit all region loading tasks
+            for (File regionDir : regionDirs) {
+                String regionName = regionDir.getName();
+                executor.submit(() -> {
+                    try {
+                        long regionStartTime = System.currentTimeMillis();
+                        getOrCreateRegionDb(regionName);
+                        long regionDuration = System.currentTimeMillis() - regionStartTime;
+
+                        logger.info("Loaded region '{}' in {}ms", regionName, regionDuration);
+                        successCount.incrementAndGet();
+                    } catch (Exception e) {
+                        logger.error("Failed to load region: {}", regionName, e);
+                        failureCount.incrementAndGet();
+                    } finally {
+                        latch.countDown();
+                    }
+                });
+            }
+
+            // Wait for all regions to load or timeout
+            boolean completed = latch.await(parallelLoadingTimeoutSeconds, TimeUnit.SECONDS);
+
+            if (!completed) {
+                logger.warn("Region loading timeout after {} seconds. {} regions may not be loaded.",
+                        parallelLoadingTimeoutSeconds, latch.getCount());
+            }
+
+            long totalDuration = System.currentTimeMillis() - startTime;
+            logger.info("Parallel loading completed: {} successful, {} failed in {}ms (avg {}ms per region)",
+                    successCount.get(), failureCount.get(), totalDuration,
+                    totalDuration / regionDirs.length);
+
+        } catch (InterruptedException e) {
+            logger.error("Region loading interrupted", e);
+            Thread.currentThread().interrupt();
+        } finally {
+            executor.shutdown();
+            try {
+                if (!executor.awaitTermination(10, TimeUnit.SECONDS)) {
+                    executor.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                executor.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
         }
     }
 

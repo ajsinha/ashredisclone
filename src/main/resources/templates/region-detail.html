@@ -154,12 +154,31 @@
         <!-- Keys Table Card -->
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="mb-0">Keys in Region</h5>
+                <div>
+                    <h5 class="mb-0 d-inline">Keys in Region</h5>
+                    <span th:if="${hasMoreKeys}" class="badge bg-warning text-dark ms-2">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        More Keys available - Please refine your search
+                        (<span th:text="${displayedKeyCount}">10000</span> of
+                        <span th:text="${totalKeyCount}">50000</span> shown)
+                    </span>
+                </div>
                 <span th:if="${pattern != '*'}" class="badge bg-warning text-dark">
                     Filtered by pattern: <span th:text="${pattern}">*</span>
                 </span>
             </div>
             <div class="card-body">
+                <!-- Alert for more keys available -->
+                <div th:if="${hasMoreKeys}" class="alert alert-warning d-flex align-items-center" role="alert">
+                    <i class="bi bi-exclamation-triangle-fill me-2" style="font-size: 1.5rem;"></i>
+                    <div>
+                        <strong>Too many keys to display!</strong><br>
+                        Showing <strong th:text="${displayedKeyCount}">25,000</strong> of
+                        <strong th:text="${totalKeyCount}">50,000</strong> keys matching your pattern.
+                        Please use the filter above to narrow down your search for better performance.
+                    </div>
+                </div>
+
                 <div th:if="${keys.isEmpty()}" class="alert alert-info mb-0">
                     <i class="bi bi-info-circle"></i> No keys found in this region matching the pattern.
                 </div>

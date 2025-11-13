@@ -91,8 +91,14 @@ public class CacheService {
             logger.info("Priming cache from database...");
             List<CacheEntry> allEntries = cacheRepository.loadAllEntries();
 
+            // Track unique regions found in database
+            Set<String> regionsFound = new HashSet<>();
+
             for (CacheEntry entry : allEntries) {
                 String region = entry.getRegion() != null ? entry.getRegion() : defaultRegion;
+
+                // Track this region
+                regionsFound.add(region);
 
                 // Add key to allKeys
                 allKeys.computeIfAbsent(region, k -> ConcurrentHashMap.newKeySet()).add(entry.getKey());
@@ -103,7 +109,15 @@ public class CacheService {
                 }
             }
 
-            logger.info("Cache primed with {} entries from database", allEntries.size());
+            // CRITICAL: Initialize all regions found in database to ensure proper data structure setup
+            // This ensures memoryCache, lruTracking, and allKeys are properly initialized
+            // even if no entries are loaded into memory for a region
+            for (String region : regionsFound) {
+                getOrCreateRegion(region);
+            }
+
+            logger.info("Cache primed with {} entries from {} regions in database",
+                    allEntries.size(), regionsFound.size());
         } catch (Exception e) {
             logger.error("Error priming cache from database", e);
         }
@@ -408,11 +422,14 @@ public class CacheService {
     }
 
     private void updateLRU(String region, String key) {
-        LinkedHashMap<String, Long> regionLRU = lruTracking.get(region);
-        if (regionLRU != null) {
-            synchronized (regionLRU) {
-                regionLRU.put(key, System.currentTimeMillis());
-            }
+        // Get or create LRU tracking for region
+        LinkedHashMap<String, Long> regionLRU = lruTracking.computeIfAbsent(
+                region,
+                k -> new LinkedHashMap<>(16, 0.75f, true)
+        );
+
+        synchronized (regionLRU) {
+            regionLRU.put(key, System.currentTimeMillis());
         }
     }
 
@@ -493,7 +510,12 @@ public class CacheService {
     }
 
     public Set<String> getAllRegions() {
-        return new HashSet<>(memoryCache.keySet());
+        // Return all regions that have any keys (in memory or in database)
+        // This ensures we see all regions even if no entries are currently in memory
+        Set<String> regions = new HashSet<>();
+        regions.addAll(memoryCache.keySet());
+        regions.addAll(allKeys.keySet());
+        return regions;
     }
 
     /**
