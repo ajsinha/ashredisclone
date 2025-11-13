@@ -47,6 +47,18 @@ public class CacheService {
     @Value("${cache.default.region:region0}")
     private String defaultRegion;
 
+    @Value("${cache.heap.monitor.enabled:true}")
+    private boolean heapMonitorEnabled;
+
+    @Value("${cache.heap.threshold.percent:80}")
+    private int heapThresholdPercent;
+
+    @Value("${cache.heap.eviction.batch.size:1000}")
+    private int heapEvictionBatchSize;
+
+    @Value("${cache.heap.monitor.interval.ms:30000}")
+    private long heapMonitorInterval;
+
     // CHANGED: Inject interface instead of concrete implementation
     @Autowired
     private CacheRepositoryInterface cacheRepository;
@@ -197,7 +209,10 @@ public class CacheService {
                     replicationService.replicateSet(region, key, value, DataType.STRING, expiresAt);
                 }
             } catch (Exception e) {
-                logger.warn("Failed to replicate SET operation: {}", e.getMessage());
+                // Only warn for actual replication failures, not missing bean
+                if (!e.getMessage().contains("Optional dependency")) {
+                    logger.warn("Failed to replicate SET operation: {}", e.getMessage());
+                }
             }
 
             // Publish event if enabled - wrap entire block to handle lazy proxy
@@ -206,7 +221,10 @@ public class CacheService {
                     pubSubService.publishChange(region, key, "SET");
                 }
             } catch (Exception e) {
-                logger.warn("Failed to publish change event: {}", e.getMessage());
+                // Only warn for actual publish failures, not missing bean
+                if (!e.getMessage().contains("Optional dependency")) {
+                    logger.warn("Failed to publish change event: {}", e.getMessage());
+                }
             }
 
             return true;
@@ -258,7 +276,10 @@ public class CacheService {
                             replicationService.replicateDelete(region, key);
                         }
                     } catch (Exception e) {
-                        logger.warn("Failed to replicate DELETE operation: {}", e.getMessage());
+                        // Only warn for actual replication failures, not missing bean
+                        if (!e.getMessage().contains("Optional dependency")) {
+                            logger.warn("Failed to replicate DELETE operation: {}", e.getMessage());
+                        }
                     }
 
                     // Publish event if enabled - wrap entire block to handle lazy proxy
@@ -267,7 +288,10 @@ public class CacheService {
                             pubSubService.publishChange(region, key, "DEL");
                         }
                     } catch (Exception e) {
-                        logger.warn("Failed to publish change event: {}", e.getMessage());
+                        // Only warn for actual publish failures, not missing bean
+                        if (!e.getMessage().contains("Optional dependency")) {
+                            logger.warn("Failed to publish change event: {}", e.getMessage());
+                        }
                     }
                 }
             }
@@ -324,7 +348,10 @@ public class CacheService {
                     replicationService.replicateExpire(region, key, seconds);
                 }
             } catch (Exception e) {
-                logger.warn("Failed to replicate EXPIRE operation: {}", e.getMessage());
+                // Only warn for actual replication failures, not missing bean
+                if (!e.getMessage().contains("Optional dependency")) {
+                    logger.warn("Failed to replicate EXPIRE operation: {}", e.getMessage());
+                }
             }
 
             return true;
@@ -543,6 +570,101 @@ public class CacheService {
         }
     }
 
+    /**
+     * Monitor heap memory usage and evict entries when threshold is exceeded.
+     * This prevents OutOfMemoryError by proactively evicting LRU entries to disk.
+     */
+    @Scheduled(fixedDelayString = "${cache.heap.monitor.interval.ms:30000}")
+    public void monitorHeapAndEvict() {
+        if (!heapMonitorEnabled) {
+            return;
+        }
+
+        try {
+            Runtime runtime = Runtime.getRuntime();
+            long maxMemory = runtime.maxMemory();
+            long totalMemory = runtime.totalMemory();
+            long freeMemory = runtime.freeMemory();
+            long usedMemory = totalMemory - freeMemory;
+
+            // Calculate heap usage percentage
+            double heapUsagePercent = (usedMemory * 100.0) / maxMemory;
+
+            logger.debug("Heap usage: {}/{} MB ({:.1f}%)",
+                    usedMemory / (1024 * 1024),
+                    maxMemory / (1024 * 1024),
+                    heapUsagePercent);
+
+            // If heap usage exceeds threshold, start aggressive eviction
+            if (heapUsagePercent >= heapThresholdPercent) {
+                int currentMemoryObjects = getCurrentMemoryObjectCount();
+
+                logger.warn("Heap threshold exceeded: {:.1f}% >= {}%. Current in-memory objects: {}. Starting aggressive eviction...",
+                        heapUsagePercent, heapThresholdPercent, currentMemoryObjects);
+
+                int evictedCount = 0;
+                int targetEvictions = Math.min(heapEvictionBatchSize, currentMemoryObjects / 2);
+
+                // Evict LRU entries in batch
+                for (int i = 0; i < targetEvictions; i++) {
+                    if (evictOldestLRUEntry()) {
+                        evictedCount++;
+                    } else {
+                        break; // No more entries to evict
+                    }
+                }
+
+                // Force garbage collection hint
+                if (evictedCount > 0) {
+                    System.gc();
+
+                    // Log results
+                    runtime = Runtime.getRuntime();
+                    usedMemory = runtime.totalMemory() - runtime.freeMemory();
+                    double newHeapUsagePercent = (usedMemory * 100.0) / maxMemory;
+
+                    logger.info("Heap-based eviction complete: evicted {} entries. Heap usage: {:.1f}% -> {:.1f}%",
+                            evictedCount, heapUsagePercent, newHeapUsagePercent);
+                }
+            }
+
+        } catch (Exception e) {
+            logger.error("Error during heap monitoring and eviction", e);
+        }
+    }
+
+    /**
+     * Evict the oldest (least recently used) entry across all regions.
+     * Returns true if an entry was evicted, false if no entries available.
+     */
+    private boolean evictOldestLRUEntry() {
+        String oldestRegion = null;
+        String oldestKey = null;
+        long oldestTime = Long.MAX_VALUE;
+
+        // Find the globally oldest entry across all regions
+        for (Map.Entry<String, LinkedHashMap<String, Long>> regionEntry : lruTracking.entrySet()) {
+            LinkedHashMap<String, Long> regionLRU = regionEntry.getValue();
+            synchronized (regionLRU) {
+                if (!regionLRU.isEmpty()) {
+                    Map.Entry<String, Long> first = regionLRU.entrySet().iterator().next();
+                    if (first.getValue() < oldestTime) {
+                        oldestTime = first.getValue();
+                        oldestRegion = regionEntry.getKey();
+                        oldestKey = first.getKey();
+                    }
+                }
+            }
+        }
+
+        if (oldestRegion != null && oldestKey != null) {
+            evictToDatabase(oldestRegion, oldestKey);
+            return true;
+        }
+
+        return false;
+    }
+
     public Set<String> getAllRegions() {
         // Return all regions that have any keys (in memory or in database)
         // This ensures we see all regions even if no entries are currently in memory
@@ -576,7 +698,10 @@ public class CacheService {
                 try {
                     replicationService.replicateDeleteRegion(region);
                 } catch (Exception e) {
-                    logger.warn("Failed to replicate DELETE_REGION operation: {}", e.getMessage());
+                    // Only warn for actual replication failures, not missing bean
+                    if (!e.getMessage().contains("Optional dependency")) {
+                        logger.warn("Failed to replicate DELETE_REGION operation: {}", e.getMessage());
+                    }
                 }
             }
 
@@ -595,7 +720,10 @@ public class CacheService {
                 try {
                     pubSubService.publishChange(region, "*", "DELETE_REGION");
                 } catch (Exception e) {
-                    logger.warn("Failed to publish DELETE_REGION event: {}", e.getMessage());
+                    // Only warn for actual publish failures, not missing bean
+                    if (!e.getMessage().contains("Optional dependency")) {
+                        logger.warn("Failed to publish DELETE_REGION event: {}", e.getMessage());
+                    }
                 }
             }
 
