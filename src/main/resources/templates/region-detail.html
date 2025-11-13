@@ -4,7 +4,7 @@
     <title th:text="'Region: ' + ${region} + ' - AshRedis'">Region Detail</title>
 </head>
 <body>
-<th:block th:replace="base :: layout(~{::title}, ~{::main})">
+<th:block th:replace="~{base :: layout(~{::title}, ~{::main})}">
     <main>
         <div class="d-flex justify-content-between align-items-center mb-4">
             <div>

@@ -4,7 +4,7 @@
     <title th:text="'Create Entry in ' + ${region} + ' - AshRedis'">Create Entry - AshRedis</title>
 </head>
 <body>
-<th:block th:replace="base :: layout(~{::title}, ~{::main})">
+<th:block th:replace="~{base :: layout(~{::title}, ~{::main})}">
     <main>
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h1>Create New Cache Entry</h1>
