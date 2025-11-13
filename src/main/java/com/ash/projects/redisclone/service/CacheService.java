@@ -91,29 +91,63 @@ public class CacheService {
             logger.info("Priming cache from database...");
             List<CacheEntry> allEntries = cacheRepository.loadAllEntries();
 
-            // Track unique regions found in database
-            Set<String> regionsFound = new HashSet<>();
+            if (allEntries.isEmpty()) {
+                logger.info("No entries found in database");
+                return;
+            }
 
-            for (CacheEntry entry : allEntries) {
-                String region = entry.getRegion() != null ? entry.getRegion() : defaultRegion;
+            // Group entries by region
+            Map<String, List<CacheEntry>> entriesByRegion = allEntries.stream()
+                    .collect(Collectors.groupingBy(
+                            entry -> entry.getRegion() != null ? entry.getRegion() : defaultRegion,
+                            LinkedHashMap::new,
+                            Collectors.toList()
+                    ));
 
-                // Track this region
-                regionsFound.add(region);
+            Set<String> regionsFound = entriesByRegion.keySet();
 
-                // Add key to allKeys
-                allKeys.computeIfAbsent(region, k -> ConcurrentHashMap.newKeySet()).add(entry.getKey());
+            // Initialize all regions
+            for (String region : regionsFound) {
+                getOrCreateRegion(region);
+            }
 
-                // Load into memory if space available
-                if (getCurrentMemoryObjectCount() < maxMemoryObjects) {
-                    loadEntryIntoMemory(entry);
+            // Register all keys in allKeys map
+            for (Map.Entry<String, List<CacheEntry>> regionEntry : entriesByRegion.entrySet()) {
+                String region = regionEntry.getKey();
+                Set<String> regionKeySet = allKeys.computeIfAbsent(region, k -> ConcurrentHashMap.newKeySet());
+                for (CacheEntry entry : regionEntry.getValue()) {
+                    regionKeySet.add(entry.getKey());
                 }
             }
 
-            // CRITICAL: Initialize all regions found in database to ensure proper data structure setup
-            // This ensures memoryCache, lruTracking, and allKeys are properly initialized
-            // even if no entries are loaded into memory for a region
+            // Round-robin loading for fair distribution across regions
+            int loadedCount = 0;
+            Map<String, Integer> regionIndexes = new HashMap<>();
             for (String region : regionsFound) {
-                getOrCreateRegion(region);
+                regionIndexes.put(region, 0);
+            }
+
+            List<String> regionList = new ArrayList<>(regionsFound);
+            boolean hasMoreEntries = true;
+
+            while (loadedCount < maxMemoryObjects && hasMoreEntries) {
+                hasMoreEntries = false;
+                for (String region : regionList) {
+                    List<CacheEntry> regionEntries = entriesByRegion.get(region);
+                    int currentIndex = regionIndexes.get(region);
+
+                    if (currentIndex < regionEntries.size()) {
+                        hasMoreEntries = true;
+                        CacheEntry entry = regionEntries.get(currentIndex);
+                        loadEntryIntoMemory(entry);
+                        regionIndexes.put(region, currentIndex + 1);
+                        loadedCount++;
+
+                        if (loadedCount >= maxMemoryObjects) {
+                            break;
+                        }
+                    }
+                }
             }
 
             logger.info("Cache primed with {} entries from {} regions in database",
@@ -581,6 +615,40 @@ public class CacheService {
 
     @PreDestroy
     public void shutdown() {
-        logger.info("Shutting down Cache Service");
+        logger.info("Shutting down Cache Service - Persisting all in-memory entries...");
+
+        try {
+            int totalPersisted = 0;
+
+            // Iterate through all regions and persist in-memory entries
+            for (Map.Entry<String, Map<String, CacheEntry>> regionEntry : memoryCache.entrySet()) {
+                String region = regionEntry.getKey();
+                Map<String, CacheEntry> regionCache = regionEntry.getValue();
+
+                int regionPersisted = 0;
+                for (Map.Entry<String, CacheEntry> cacheEntry : regionCache.entrySet()) {
+                    CacheEntry entry = cacheEntry.getValue();
+                    if (entry != null) {
+                        entry.setInMemory(false);
+                        cacheRepository.saveEntry(entry);
+                        regionPersisted++;
+                        totalPersisted++;
+                    }
+                }
+
+                if (regionPersisted > 0) {
+                    logger.info("Persisted {} entries from region '{}'", regionPersisted, region);
+                }
+            }
+
+            // Clear in-memory structures
+            memoryCache.clear();
+            lruTracking.clear();
+
+            logger.info("Cache Service shutdown complete - Persisted {} total entries", totalPersisted);
+
+        } catch (Exception e) {
+            logger.error("Error during cache shutdown - some data may not be persisted", e);
+        }
     }
 }
