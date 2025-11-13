@@ -143,22 +143,22 @@ public class CacheService {
 
             putEntry(region, key, entry);
 
-            // Replicate if enabled
-            if (replicationService != null) {
-                try {
+            // Replicate if enabled - wrap entire block to handle lazy proxy
+            try {
+                if (replicationService != null) {
                     replicationService.replicateSet(region, key, value, DataType.STRING, expiresAt);
-                } catch (Exception e) {
-                    logger.warn("Failed to replicate SET operation: {}", e.getMessage());
                 }
+            } catch (Exception e) {
+                logger.warn("Failed to replicate SET operation: {}", e.getMessage());
             }
 
-            // Publish event if enabled
-            if (pubSubService != null) {
-                try {
+            // Publish event if enabled - wrap entire block to handle lazy proxy
+            try {
+                if (pubSubService != null) {
                     pubSubService.publishChange(region, key, "SET");
-                } catch (Exception e) {
-                    logger.warn("Failed to publish change event: {}", e.getMessage());
                 }
+            } catch (Exception e) {
+                logger.warn("Failed to publish change event: {}", e.getMessage());
             }
 
             return true;
@@ -204,22 +204,22 @@ public class CacheService {
                 if (deleteEntry(region, key)) {
                     deleted++;
 
-                    // Replicate if enabled
-                    if (replicationService != null) {
-                        try {
+                    // Replicate if enabled - wrap entire block to handle lazy proxy
+                    try {
+                        if (replicationService != null) {
                             replicationService.replicateDelete(region, key);
-                        } catch (Exception e) {
-                            logger.warn("Failed to replicate DELETE operation: {}", e.getMessage());
                         }
+                    } catch (Exception e) {
+                        logger.warn("Failed to replicate DELETE operation: {}", e.getMessage());
                     }
 
-                    // Publish event if enabled
-                    if (pubSubService != null) {
-                        try {
+                    // Publish event if enabled - wrap entire block to handle lazy proxy
+                    try {
+                        if (pubSubService != null) {
                             pubSubService.publishChange(region, key, "DEL");
-                        } catch (Exception e) {
-                            logger.warn("Failed to publish change event: {}", e.getMessage());
                         }
+                    } catch (Exception e) {
+                        logger.warn("Failed to publish change event: {}", e.getMessage());
                     }
                 }
             }
@@ -270,13 +270,13 @@ public class CacheService {
             // Update in database
             cacheRepository.updateExpiry(region, key, expiresAt);
 
-            // Replicate if enabled
-            if (replicationService != null) {
-                try {
+            // Replicate if enabled - wrap entire block to handle lazy proxy
+            try {
+                if (replicationService != null) {
                     replicationService.replicateExpire(region, key, seconds);
-                } catch (Exception e) {
-                    logger.warn("Failed to replicate EXPIRE operation: {}", e.getMessage());
                 }
+            } catch (Exception e) {
+                logger.warn("Failed to replicate EXPIRE operation: {}", e.getMessage());
             }
 
             return true;
