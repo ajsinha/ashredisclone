@@ -1,4 +1,3 @@
-<!-- regions.html -->
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
 <head>
@@ -15,50 +14,51 @@
             </a>
         </div>
 
-        <div class="row">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-body">
-                        <div class="table-responsive">
-                            <table class="table table-hover">
-                                <thead>
-                                <tr>
-                                    <th>Region Name</th>
-                                    <th>Total Keys</th>
-                                    <th>Memory Keys</th>
-                                    <th>Actions</th>
-                                </tr>
-                                </thead>
-                                <tbody>
-                                <tr th:each="region : ${regions}">
-                                    <td>
-                                        <strong th:text="${region.name}">region0</strong>
-                                        <span class="badge bg-secondary ms-2"
-                                              th:if="${region.name == 'region0'}">DEFAULT</span>
-                                    </td>
-                                    <td th:text="${region.totalKeys}">0</td>
-                                    <td th:text="${region.memoryKeys}">0</td>
-                                    <td>
-                                        <a th:href="@{/region/{name}(name=${region.name})}"
-                                           class="btn btn-sm btn-primary">View</a>
-                                        <button type="button"
-                                                class="btn btn-sm btn-danger"
-                                                th:if="${user.isAdmin() and isPrimary and region.name != 'region0'}"
-                                                th:attr="data-region=${region.name}"
-                                                onclick="confirmDeleteRegion(this)">
-                                            Delete
-                                        </button>
-                                    </td>
-                                </tr>
-                                <tr th:if="${regions.isEmpty()}">
-                                    <td colspan="4" class="text-center text-muted">
-                                        No regions found. Create one to get started.
-                                    </td>
-                                </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
+        <div class="card">
+            <div class="card-body">
+                <!-- Enhanced Table -->
+                <div class="table-responsive">
+                    <table id="regionsTable" class="table table-hover table-striped">
+                        <thead class="table-dark">
+                        <tr>
+                            <th>Region Name</th>
+                            <th>Total Keys</th>
+                            <th>Memory Keys</th>
+                            <th>Database Keys</th>
+                            <th class="no-sort">Actions</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr th:each="region : ${regions}">
+                            <td>
+                                <strong th:text="${region.name}">region0</strong>
+                                <span class="badge bg-secondary ms-2"
+                                      th:if="${region.name == 'region0'}">DEFAULT</span>
+                            </td>
+                            <td th:text="${region.totalKeys}">0</td>
+                            <td th:text="${region.memoryKeys}">0</td>
+                            <td th:text="${region.totalKeys - region.memoryKeys}">0</td>
+                            <td>
+                                <a th:href="@{/region/{name}(name=${region.name})}"
+                                   class="btn btn-sm btn-primary">
+                                    <i class="bi bi-eye"></i> View
+                                </a>
+                                <button type="button"
+                                        class="btn btn-sm btn-danger"
+                                        th:if="${user.isAdmin() and isPrimary and region.name != 'region0'}"
+                                        th:attr="data-region=${region.name}"
+                                        onclick="confirmDeleteRegion(this)">
+                                    <i class="bi bi-trash"></i> Delete
+                                </button>
+                            </td>
+                        </tr>
+                        <tr th:if="${regions.isEmpty()}">
+                            <td colspan="5" class="text-center text-muted">
+                                No regions found. Create one to get started.
+                            </td>
+                        </tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -70,7 +70,23 @@
     </main>
 </th:block>
 
+<!-- Enhanced Table JavaScript -->
+<script th:src="@{/js/table-utils.js}"></script>
 <script th:inline="javascript">
+    // Initialize enhanced table
+    document.addEventListener('DOMContentLoaded', function() {
+        const regionsTable = document.getElementById('regionsTable');
+        if (regionsTable && regionsTable.querySelector('tbody tr:not(:has(td[colspan]))')) {
+            new EnhancedTable('regionsTable', {
+                rowsPerPage: 10,
+                pageSizes: [5, 10, 50, 100, 'All'],
+                searchable: true,
+                sortable: true
+            });
+        }
+    });
+
+    // Delete confirmation
     function confirmDeleteRegion(button) {
         const regionName = button.getAttribute('data-region');
 
