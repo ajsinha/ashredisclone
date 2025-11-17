@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Regions - AshRedis</title>
+    <style>
+        .refresh-controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .countdown-badge {
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            min-width: 80px;
+            text-align: center;
+        }
+
+        /* iOS-style Toggle Switch */
+        .toggle-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .toggle-label {
+            font-size: 0.95rem;
+            font-weight: 500;
+            color: #495057;
+            user-select: none;
+        }
+
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 56px;
+            height: 32px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: 0.3s;
+            border-radius: 32px;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 26px;
+            width: 26px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: 0.3s;
+            border-radius: 50%;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        input:checked + .toggle-slider {
+            background-color: #34c759; /* iOS green */
+        }
+
+        input:checked + .toggle-slider:before {
+            transform: translateX(24px);
+        }
+
+        input:focus + .toggle-slider {
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1), 0 0 0 3px rgba(52, 199, 89, 0.2);
+        }
+
+        /* Hover effect */
+        .toggle-slider:hover {
+            background-color: #bbb;
+        }
+
+        input:checked + .toggle-slider:hover {
+            background-color: #30b350;
+        }
+    </style>
+</head>
+<body>
+<th:block th:replace="~{base :: layout(~{::title}, ~{::main})}">
+    <main>
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1>Regions</h1>
+            <div class="d-flex gap-2 align-items-center">
+                <!-- Auto-refresh Controls -->
+                <div class="refresh-controls">
+                    <div class="toggle-container">
+                        <span class="toggle-label">
+                            <i class="bi bi-arrow-clockwise"></i> Auto-Refresh
+                        </span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="autoRefreshToggle" onchange="toggleAutoRefresh()">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <span id="countdownBadge"
+                          class="badge bg-secondary countdown-badge"
+                          style="display: none;">
+                        <i class="bi bi-clock"></i> <span id="countdownValue">30</span>s
+                    </span>
+                </div>
+
+                <a th:href="@{/region/create}" class="btn btn-success"
+                   th:if="${user.isAdmin() and isPrimary}">
+                    <i class="bi bi-plus-circle"></i> Create Region
+                </a>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                <!-- Enhanced Table -->
+                <div class="table-responsive">
+                    <table id="regionsTable" class="table table-hover table-striped">
+                        <thead class="table-dark">
+                        <tr>
+                            <th>Region Name</th>
+                            <th>Total Keys</th>
+                            <th>Memory Keys</th>
+                            <th>Database Keys</th>
+                            <th class="no-sort">Actions</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr th:each="region : ${regions}">
+                            <td>
+                                <strong th:text="${region.name}">region0</strong>
+                                <span class="badge bg-secondary ms-2"
+                                      th:if="${region.name == 'region0'}">DEFAULT</span>
+                            </td>
+                            <td th:text="${region.totalKeys}">0</td>
+                            <td th:text="${region.memoryKeys}">0</td>
+                            <td th:text="${region.totalKeys - region.memoryKeys}">0</td>
+                            <td>
+                                <a th:href="@{/region/{name}(name=${region.name})}"
+                                   class="btn btn-sm btn-primary">
+                                    <i class="bi bi-eye"></i> View
+                                </a>
+                                <button type="button"
+                                        class="btn btn-sm btn-danger"
+                                        th:if="${user.isAdmin() and isPrimary and region.name != 'region0'}"
+                                        th:attr="data-region=${region.name}"
+                                        onclick="confirmDeleteRegion(this)">
+                                    <i class="bi bi-trash"></i> Delete
+                                </button>
+                            </td>
+                        </tr>
+                        <tr th:if="${regions.isEmpty()}">
+                            <td colspan="5" class="text-center text-muted">
+                                No regions found. Create one to get started.
+                            </td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Delete Region Form (hidden) -->
+        <form id="deleteRegionForm" th:action="@{/region/delete}" method="post" style="display:none;">
+            <input type="hidden" name="regionName" id="deleteRegionName">
+        </form>
+    </main>
+</th:block>
+
+<!-- Enhanced Table JavaScript -->
+<script th:src="@{/js/table-utils.js}"></script>
+<script th:inline="javascript">
+    // Initialize enhanced table
+    document.addEventListener('DOMContentLoaded', function() {
+        const regionsTable = document.getElementById('regionsTable');
+        if (regionsTable && regionsTable.querySelector('tbody tr:not(:has(td[colspan]))')) {
+            new EnhancedTable('regionsTable', {
+                rowsPerPage: 10,
+                pageSizes: [5, 10, 50, 100, 'All'],
+                searchable: true,
+                sortable: true
+            });
+        }
+
+        // Initialize auto-refresh state from localStorage
+        initAutoRefresh();
+    });
+
+    // Delete confirmation
+    function confirmDeleteRegion(button) {
+        const regionName = button.getAttribute('data-region');
+
+        if (confirm('Are you sure you want to delete region "' + regionName + '"?\n\nThis will delete ALL keys in this region. This action cannot be undone.')) {
+            document.getElementById('deleteRegionName').value = regionName;
+            document.getElementById('deleteRegionForm').submit();
+        }
+    }
+
+    // Auto-refresh functionality
+    let autoRefreshEnabled = false;
+    let countdownInterval = null;
+    let refreshInterval = null;
+    let remainingSeconds = 30;
+    const REFRESH_INTERVAL = 30; // seconds
+
+    function initAutoRefresh() {
+        // Load saved state from localStorage
+        const savedState = localStorage.getItem('regionsAutoRefresh');
+        if (savedState === 'true') {
+            enableAutoRefresh();
+        }
+    }
+
+    function toggleAutoRefresh() {
+        const toggle = document.getElementById('autoRefreshToggle');
+        if (toggle.checked) {
+            enableAutoRefresh();
+        } else {
+            disableAutoRefresh();
+        }
+    }
+
+    function enableAutoRefresh() {
+        autoRefreshEnabled = true;
+        remainingSeconds = REFRESH_INTERVAL;
+
+        // Update UI
+        document.getElementById('autoRefreshToggle').checked = true;
+        document.getElementById('countdownBadge').style.display = 'inline-block';
+
+        // Save state
+        localStorage.setItem('regionsAutoRefresh', 'true');
+
+        // Start countdown
+        startCountdown();
+
+        // Start refresh interval
+        refreshInterval = setInterval(function() {
+            window.location.reload();
+        }, REFRESH_INTERVAL * 1000);
+    }
+
+    function disableAutoRefresh() {
+        autoRefreshEnabled = false;
+
+        // Update UI
+        document.getElementById('autoRefreshToggle').checked = false;
+        document.getElementById('countdownBadge').style.display = 'none';
+
+        // Save state
+        localStorage.setItem('regionsAutoRefresh', 'false');
+
+        // Clear intervals
+        if (countdownInterval) {
+            clearInterval(countdownInterval);
+            countdownInterval = null;
+        }
+        if (refreshInterval) {
+            clearInterval(refreshInterval);
+            refreshInterval = null;
+        }
+    }
+
+    function startCountdown() {
+        // Clear existing countdown if any
+        if (countdownInterval) {
+            clearInterval(countdownInterval);
+        }
+
+        // Update countdown display
+        updateCountdownDisplay();
+
+        // Start new countdown
+        countdownInterval = setInterval(function() {
+            remainingSeconds--;
+
+            if (remainingSeconds <= 0) {
+                remainingSeconds = REFRESH_INTERVAL;
+            }
+
+            updateCountdownDisplay();
+        }, 1000);
+    }
+
+    function updateCountdownDisplay() {
+        const countdownValue = document.getElementById('countdownValue');
+        if (countdownValue) {
+            countdownValue.textContent = remainingSeconds;
+
+            // Change badge color based on time remaining
+            const badge = document.getElementById('countdownBadge');
+            badge.className = 'badge countdown-badge';
+
+            if (remainingSeconds <= 5) {
+                badge.classList.add('bg-danger');
+            } else if (remainingSeconds <= 10) {
+                badge.classList.add('bg-warning', 'text-dark');
+            } else {
+                badge.classList.add('bg-secondary');
+            }
+        }
+    }
+
+    // Clean up on page unload
+    window.addEventListener('beforeunload', function() {
+        if (countdownInterval) {
+            clearInterval(countdownInterval);
+        }
+        if (refreshInterval) {
+            clearInterval(refreshInterval);
+        }
+    });
+</script>
+</body>
+</html>

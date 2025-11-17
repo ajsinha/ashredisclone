@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title th:text="'Edit Entry: ' + ${key} + ' - AshRedis'">Edit Entry - AshRedis</title>
+</head>
+<body>
+<th:block th:replace="~{base :: layout(~{::title}, ~{::main})}">
+    <main>
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1>Edit Cache Entry</h1>
+            <a th:href="@{/entry/{region}/{key}(region=${region},key=${key})}" class="btn btn-secondary">
+                <i class="bi bi-arrow-left"></i> Back to Entry
+            </a>
+        </div>
+
+        <div class="row">
+            <div class="col-lg-8">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">✏️ Edit Entry Details</h5>
+                    </div>
+                    <div class="card-body">
+                        <form th:action="@{/entry/update}" method="post">
+                            <!-- Hidden fields -->
+                            <input type="hidden" name="region" th:value="${region}">
+                            <input type="hidden" name="key" th:value="${key}">
+
+                            <!-- Region Display (Read-only) -->
+                            <div class="mb-3">
+                                <label class="form-label">Region</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">📁</span>
+                                    <input type="text" class="form-control" th:value="${region}" disabled>
+                                </div>
+                            </div>
+
+                            <!-- Key Display (Read-only) -->
+                            <div class="mb-3">
+                                <label class="form-label">Key</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">🔑</span>
+                                    <input type="text" class="form-control" th:value="${key}" disabled>
+                                </div>
+                                <div class="form-text">
+                                    Keys cannot be changed. To use a different key, create a new entry.
+                                </div>
+                            </div>
+
+                            <!-- Value Input -->
+                            <div class="mb-3">
+                                <label for="value" class="form-label">
+                                    Value <span class="text-danger">*</span>
+                                </label>
+                                <textarea class="form-control"
+                                          id="value"
+                                          name="value"
+                                          rows="12"
+                                          required
+                                          autofocus
+                                          style="font-family: 'Courier New', monospace;"
+                                          th:text="${value}">value</textarea>
+                                <div class="form-text">
+                                    Update the value for this cache entry. Supports plain text, JSON, XML, or any string format.
+                                </div>
+                            </div>
+
+                            <!-- Current TTL Display -->
+                            <div class="mb-3">
+                                <label class="form-label">Current TTL Status</label>
+                                <div class="alert alert-info mb-0">
+                                    <strong>Current Status:</strong>
+                                    <span th:if="${ttl == -1}">
+                                        <i class="bi bi-infinity"></i> No expiration (persistent)
+                                    </span>
+                                    <span th:if="${ttl == -2}" class="text-danger">
+                                        <i class="bi bi-x-circle"></i> Entry expired or does not exist
+                                    </span>
+                                    <span th:if="${ttl > 0}">
+                                        <i class="bi bi-clock"></i> <strong th:text="${ttl}">60</strong> seconds remaining
+                                    </span>
+                                </div>
+                            </div>
+
+                            <!-- TTL Input -->
+                            <div class="mb-3">
+                                <label for="ttl" class="form-label">
+                                    New TTL (Time To Live)
+                                </label>
+                                <div class="input-group">
+                                    <span class="input-group-text">⏱️</span>
+                                    <input type="number"
+                                           class="form-control"
+                                           id="ttl"
+                                           name="ttl"
+                                           min="0"
+                                           th:value="${ttl > 0 ? ttl : 0}"
+                                           placeholder="0">
+                                    <span class="input-group-text">seconds</span>
+                                </div>
+                                <div class="form-text">
+                                    Set to <strong>0</strong> for no expiration. Otherwise, specify seconds until expiration.
+                                </div>
+                            </div>
+
+                            <!-- Quick TTL Buttons -->
+                            <div class="mb-4">
+                                <label class="form-label">Quick TTL Values:</label>
+                                <div class="btn-group" role="group">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setTTL(60)">
+                                        1 min
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setTTL(300)">
+                                        5 min
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setTTL(900)">
+                                        15 min
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setTTL(3600)">
+                                        1 hour
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setTTL(86400)">
+                                        1 day
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setTTL(604800)">
+                                        1 week
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-success" onclick="setTTL(0)">
+                                        Never Expire
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Action Buttons -->
+                            <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                                <a th:href="@{/entry/{region}/{key}(region=${region},key=${key})}" class="btn btn-secondary">
+                                    Cancel
+                                </a>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="bi bi-save"></i> Save Changes
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Help Sidebar -->
+            <div class="col-lg-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h6 class="mb-0">💡 Editing Tips</h6>
+                    </div>
+                    <div class="card-body">
+                        <h6>Value Editing</h6>
+                        <ul class="small">
+                            <li>The textarea will auto-format JSON when you leave the field</li>
+                            <li>Use Ctrl+Z (or Cmd+Z) to undo changes</li>
+                            <li>Increase browser zoom if text is too small</li>
+                            <li>Original value is preserved until you save</li>
+                        </ul>
+
+                        <hr>
+
+                        <h6>TTL (Time To Live)</h6>
+                        <ul class="small">
+                            <li><strong>0 seconds</strong> = Never expires (persistent)</li>
+                            <li><strong>Positive number</strong> = Expires after that many seconds</li>
+                            <li>Use quick buttons for common durations</li>
+                            <li>Expiration starts from when you save</li>
+                        </ul>
+
+                        <hr>
+
+                        <h6>Common TTL Values</h6>
+                        <table class="table table-sm small">
+                            <tbody>
+                            <tr>
+                                <td>1 minute</td>
+                                <td class="text-end"><code>60</code></td>
+                            </tr>
+                            <tr>
+                                <td>5 minutes</td>
+                                <td class="text-end"><code>300</code></td>
+                            </tr>
+                            <tr>
+                                <td>15 minutes</td>
+                                <td class="text-end"><code>900</code></td>
+                            </tr>
+                            <tr>
+                                <td>1 hour</td>
+                                <td class="text-end"><code>3,600</code></td>
+                            </tr>
+                            <tr>
+                                <td>1 day</td>
+                                <td class="text-end"><code>86,400</code></td>
+                            </tr>
+                            <tr>
+                                <td>1 week</td>
+                                <td class="text-end"><code>604,800</code></td>
+                            </tr>
+                            <tr>
+                                <td>Never</td>
+                                <td class="text-end"><code>0</code></td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <h6 class="mb-0">⚠️ Important Notes</h6>
+                    </div>
+                    <div class="card-body">
+                        <ul class="small mb-0">
+                            <li><strong>Keys cannot be changed</strong> - Create a new entry if you need a different key</li>
+                            <li><strong>Changes are immediate</strong> - No undo after saving</li>
+                            <li><strong>Value overwrites</strong> - Previous value is completely replaced</li>
+                            <li><strong>TTL resets</strong> - Countdown starts fresh from save time</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="card mt-3 border-danger">
+                    <div class="card-header bg-danger text-white">
+                        <h6 class="mb-0">🗑️ Delete Entry</h6>
+                    </div>
+                    <div class="card-body">
+                        <p class="small mb-2">Need to remove this entry entirely?</p>
+                        <a th:href="@{/entry/{region}/{key}(region=${region},key=${key})}" class="btn btn-sm btn-outline-danger w-100">
+                            Go Back to Delete
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+</th:block>
+
+<script>
+    function setTTL(seconds) {
+        document.getElementById('ttl').value = seconds;
+    }
+
+    // Auto-format JSON on blur
+    document.getElementById('value').addEventListener('blur', function() {
+        const value = this.value.trim();
+        if (value.startsWith('{') || value.startsWith('[')) {
+            try {
+                const formatted = JSON.stringify(JSON.parse(value), null, 2);
+                this.value = formatted;
+            } catch (e) {
+                // Not valid JSON, ignore
+            }
+        }
+    });
+
+    // Warn if leaving page with unsaved changes
+    let originalValue = document.getElementById('value').value;
+    let originalTTL = document.getElementById('ttl').value;
+
+    window.addEventListener('beforeunload', function(e) {
+        const currentValue = document.getElementById('value').value;
+        const currentTTL = document.getElementById('ttl').value;
+
+        if (currentValue !== originalValue || currentTTL !== originalTTL) {
+            e.preventDefault();
+            e.returnValue = '';
+            return '';
+        }
+    });
+
+    // Don't warn if form is being submitted
+    document.querySelector('form').addEventListener('submit', function() {
+        window.removeEventListener('beforeunload', arguments.callee);
+    });
+</script>
+</body>
+</html>
