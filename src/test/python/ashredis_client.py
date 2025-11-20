@@ -55,6 +55,21 @@ class AshRedisClient:
     def b64set(self, key: str, value: str, region: Optional[str] = None,
             ttl_seconds: Optional[int] = None) -> str:
         """SET command"""
+        import base64
+
+
+        # Step 1: Encode the string to bytes (using UTF-8 is standard)
+        string_bytes = value.encode("utf-8")
+        print(f"Original Bytes: {string_bytes}")
+
+        # Step 2: Encode the bytes to Base64
+        encoded_bytes = base64.b64encode(string_bytes)
+        print(f"Encoded Bytes: {encoded_bytes}")
+
+        # Optional Step 3: Decode the Base64 bytes back into a string for display/storage
+        value = encoded_bytes.decode("utf-8")
+        print(f"Encoded String: {value}")
+
         region = region or self.default_region
 
         cmd = ['B64SET']
@@ -372,3 +387,8 @@ if __name__ == '__main__':
         # Delete
         deleted = client.delete('mykey')
         print(f"Deleted keys: {deleted}")
+
+
+        client.b64set('b64key', '{"a": 50}')
+        value = client.get('b64key')
+        print(f"GET mykey: {value}")

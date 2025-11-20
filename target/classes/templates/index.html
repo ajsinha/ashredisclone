@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Dashboard - AshRedis</title>
+</head>
+<body>
+<th:block th:replace="~{base :: layout(~{::title}, ~{::main})}">
+    <main>
+        <h1 class="mb-4">Dashboard</h1>
+
+        <div class="row">
+            <!-- Status Card -->
+            <div class="col-md-4 mb-4">
+                <div class="card text-white" th:classappend="${isPrimary ? 'bg-success' : 'bg-warning'}">
+                    <div class="card-body">
+                        <h5 class="card-title">Instance Status</h5>
+                        <h2 th:text="${isPrimary ? 'PRIMARY' : 'SECONDARY'}">PRIMARY</h2>
+                        <p class="card-text mb-0">
+                            <span th:if="${isPrimary}">This instance handles all write operations</span>
+                            <span th:unless="${isPrimary}">This instance is read-only replica</span>
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Regions Card -->
+            <div class="col-md-4 mb-4">
+                <div class="card bg-primary text-white">
+                    <div class="card-body">
+                        <h5 class="card-title">Total Regions</h5>
+                        <h2 th:text="${regions.size()}">0</h2>
+                        <div class="d-grid gap-2">
+                            <a href="/regions" class="btn btn-light btn-sm">View All Regions</a>
+                            <a th:href="@{/region/create}"
+                               class="btn btn-outline-light btn-sm"
+                               th:if="${user.isAdmin() and isPrimary}">
+                                + Create Region
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Actions Card -->
+            <div class="col-md-4 mb-4">
+                <div class="card bg-info text-white">
+                    <div class="card-body">
+                        <h5 class="card-title">Quick Actions</h5>
+                        <div class="d-grid gap-2">
+                            <a href="/search" class="btn btn-light btn-sm">
+                                <i class="bi bi-search"></i> Search Entries
+                            </a>
+                            <a href="/regions" class="btn btn-light btn-sm">
+                                <i class="bi bi-folder"></i> Browse Regions
+                            </a>
+                            <a href="/stats" class="btn btn-light btn-sm">
+                                <i class="bi bi-graph-up"></i> View Statistics
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Regions -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Available Regions</h5>
+                        <a href="/regions" class="btn btn-sm btn-primary">View All</a>
+                    </div>
+                    <div class="card-body">
+                        <div th:if="${!regions.isEmpty()}" class="list-group">
+                            <a th:each="region : ${regions}"
+                               th:href="@{/region/{name}(name=${region})}"
+                               class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h6 class="mb-1" th:text="${region}">region0</h6>
+                                    <small class="text-muted">Click to browse keys</small>
+                                </div>
+                                <span class="badge bg-primary">→</span>
+                            </a>
+                        </div>
+
+                        <div th:if="${regions.isEmpty()}" class="alert alert-info mb-0">
+                            <h5 class="alert-heading">🚀 Get Started</h5>
+                            <p>No regions available yet. Regions are automatically created when you add data.</p>
+                            <hr>
+                            <div class="d-grid gap-2 d-md-flex">
+                                <a th:href="@{/region/create}"
+                                   class="btn btn-success"
+                                   th:if="${user.isAdmin() and isPrimary}">
+                                    Create Your First Region
+                                </a>
+                                <a href="/search" class="btn btn-primary">
+                                    Or Search Existing Data
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- System Information -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">System Information</h5>
+                    </div>
+                    <div class="card-body">
+                        <dl class="row mb-0">
+                            <dt class="col-sm-3">Version</dt>
+                            <dd class="col-sm-9">1.0.0</dd>
+
+                            <dt class="col-sm-3">Instance Mode</dt>
+                            <dd class="col-sm-9">
+                                    <span class="badge" th:classappend="${isPrimary ? 'bg-success' : 'bg-warning'}"
+                                          th:text="${isPrimary ? 'PRIMARY' : 'SECONDARY'}">PRIMARY</span>
+                            </dd>
+
+                            <dt class="col-sm-3">Network Server</dt>
+                            <dd class="col-sm-9">Port 6379 (Active)</dd>
+
+                            <dt class="col-sm-3">Database</dt>
+                            <dd class="col-sm-9">
+                                <span class="badge bg-info me-2" th:text="${repositoryType}">SQL</span>
+                                <span th:text="${repositoryInfo}">SQL Database</span>
+                            </dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+</th:block>
+</body>
+</html>

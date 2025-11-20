@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title th:text="'Create Entry in ' + ${region} + ' - AshRedis'">Create Entry - AshRedis</title>
+</head>
+<body>
+<th:block th:replace="~{base :: layout(~{::title}, ~{::main})}">
+    <main>
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1>Create New Cache Entry</h1>
+            <a th:href="@{/region/{name}(name=${region})}" class="btn btn-secondary">
+                <i class="bi bi-arrow-left"></i> Back to Region
+            </a>
+        </div>
+
+        <div class="row">
+            <div class="col-lg-8">
+                <div class="card">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0">📝 Entry Details</h5>
+                    </div>
+                    <div class="card-body">
+                        <form th:action="@{/entry/create}" method="post">
+                            <!-- Hidden field for region -->
+                            <input type="hidden" name="region" th:value="${region}">
+
+                            <!-- Region Display (Read-only) -->
+                            <div class="mb-3">
+                                <label class="form-label">Target Region</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">📁</span>
+                                    <input type="text" class="form-control" th:value="${region}" disabled>
+                                </div>
+                                <div class="form-text">
+                                    The entry will be created in the <strong th:text="${region}">region</strong> region.
+                                </div>
+                            </div>
+
+                            <!-- Key Input -->
+                            <div class="mb-3">
+                                <label for="key" class="form-label">
+                                    Key <span class="text-danger">*</span>
+                                </label>
+                                <div class="input-group">
+                                    <span class="input-group-text">🔑</span>
+                                    <input type="text"
+                                           class="form-control"
+                                           id="key"
+                                           name="key"
+                                           placeholder="e.g., user:123, session:abc, product:item-456"
+                                           required
+                                           autofocus>
+                                </div>
+                                <div class="form-text">
+                                    Enter a unique key identifier. Common patterns: <code>prefix:id</code>, <code>namespace:key</code>
+                                </div>
+                            </div>
+
+                            <!-- Value Input -->
+                            <div class="mb-3">
+                                <label for="value" class="form-label">
+                                    Value <span class="text-danger">*</span>
+                                </label>
+                                <textarea class="form-control"
+                                          id="value"
+                                          name="value"
+                                          rows="10"
+                                          placeholder="Enter value (can be text, JSON, XML, or any string data)"
+                                          required
+                                          style="font-family: 'Courier New', monospace;"></textarea>
+                                <div class="form-text">
+                                    The value can be any text format. For structured data, JSON is recommended.
+                                </div>
+                            </div>
+
+                            <!-- TTL Input -->
+                            <div class="mb-3">
+                                <label for="ttl" class="form-label">
+                                    TTL (Time To Live)
+                                </label>
+                                <div class="input-group">
+                                    <span class="input-group-text">⏱️</span>
+                                    <input type="number"
+                                           class="form-control"
+                                           id="ttl"
+                                           name="ttl"
+                                           min="0"
+                                           value="0"
+                                           placeholder="0">
+                                    <span class="input-group-text">seconds</span>
+                                </div>
+                                <div class="form-text">
+                                    Time in seconds until the entry expires. Set to <strong>0</strong> for no expiration.
+                                </div>
+                            </div>
+
+                            <!-- Quick TTL Buttons -->
+                            <div class="mb-4">
+                                <label class="form-label">Quick TTL Values:</label>
+                                <div class="btn-group" role="group">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setTTL(60)">
+                                        1 min
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setTTL(300)">
+                                        5 min
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setTTL(3600)">
+                                        1 hour
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setTTL(86400)">
+                                        1 day
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setTTL(604800)">
+                                        1 week
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="setTTL(0)">
+                                        Never
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Action Buttons -->
+                            <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                                <a th:href="@{/region/{name}(name=${region})}" class="btn btn-secondary">
+                                    Cancel
+                                </a>
+                                <button type="submit" class="btn btn-success">
+                                    <i class="bi bi-plus-circle"></i> Create Entry
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Help Sidebar -->
+            <div class="col-lg-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h6 class="mb-0">💡 Tips & Examples</h6>
+                    </div>
+                    <div class="card-body">
+                        <h6>Key Naming Conventions</h6>
+                        <ul class="small">
+                            <li><code>user:123</code> - User data by ID</li>
+                            <li><code>session:abc-def</code> - Session data</li>
+                            <li><code>cache:product:456</code> - Cached product</li>
+                            <li><code>config:app:theme</code> - Configuration</li>
+                        </ul>
+
+                        <hr>
+
+                        <h6>Value Formats</h6>
+                        <div class="mb-2">
+                            <strong>Simple String:</strong>
+                            <pre class="small bg-light p-2 rounded">Hello World</pre>
+                        </div>
+                        <div class="mb-2">
+                            <strong>JSON Object:</strong>
+                            <pre class="small bg-light p-2 rounded">{
+  "name": "John",
+  "age": 30
+}</pre>
+                        </div>
+                        <div class="mb-2">
+                            <strong>JSON Array:</strong>
+                            <pre class="small bg-light p-2 rounded">["item1", "item2"]</pre>
+                        </div>
+
+                        <hr>
+
+                        <h6>TTL Examples</h6>
+                        <ul class="small mb-0">
+                            <li><strong>60</strong> = 1 minute</li>
+                            <li><strong>3600</strong> = 1 hour</li>
+                            <li><strong>86400</strong> = 1 day</li>
+                            <li><strong>604800</strong> = 1 week</li>
+                            <li><strong>0</strong> = No expiration</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <h6 class="mb-0">⚠️ Important Notes</h6>
+                    </div>
+                    <div class="card-body">
+                        <ul class="small mb-0">
+                            <li>Keys must be unique within a region</li>
+                            <li>Duplicate keys will overwrite existing values</li>
+                            <li>Expired entries are automatically cleaned up</li>
+                            <li>Values are stored as strings (serialize complex data as JSON)</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+</th:block>
+
+<script>
+    function setTTL(seconds) {
+        document.getElementById('ttl').value = seconds;
+    }
+
+    // Auto-format JSON on blur
+    document.getElementById('value').addEventListener('blur', function() {
+        const value = this.value.trim();
+        if (value.startsWith('{') || value.startsWith('[')) {
+            try {
+                const formatted = JSON.stringify(JSON.parse(value), null, 2);
+                this.value = formatted;
+            } catch (e) {
+                // Not valid JSON, ignore
+            }
+        }
+    });
+</script>
+</body>
+</html>

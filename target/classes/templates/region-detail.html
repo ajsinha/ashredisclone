@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title th:text="'Region: ' + ${region}">Region Detail - AshRedis</title>
+    <style>
+        .refresh-controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .countdown-badge {
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            min-width: 80px;
+            text-align: center;
+        }
+
+        /* iOS-style Toggle Switch */
+        .toggle-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .toggle-label {
+            font-size: 0.95rem;
+            font-weight: 500;
+            color: #495057;
+            user-select: none;
+        }
+
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 56px;
+            height: 32px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: 0.3s;
+            border-radius: 32px;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 26px;
+            width: 26px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: 0.3s;
+            border-radius: 50%;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        input:checked + .toggle-slider {
+            background-color: #34c759; /* iOS green */
+        }
+
+        input:checked + .toggle-slider:before {
+            transform: translateX(24px);
+        }
+
+        input:focus + .toggle-slider {
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1), 0 0 0 3px rgba(52, 199, 89, 0.2);
+        }
+
+        /* Hover effect */
+        .toggle-slider:hover {
+            background-color: #bbb;
+        }
+
+        input:checked + .toggle-slider:hover {
+            background-color: #30b350;
+        }
+    </style>
+</head>
+<body>
+<th:block th:replace="~{base :: layout(~{::title}, ~{::main})}">
+    <main>
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h1 class="mb-1">Region: <span th:text="${region}">region0</span></h1>
+                <p class="text-muted mb-0">
+                    <span class="badge bg-info" th:text="${keys.size()} + ' keys'">0 keys</span>
+                </p>
+            </div>
+            <div class="d-flex gap-2 align-items-center">
+                <!-- Auto-refresh Controls -->
+                <div class="refresh-controls">
+                    <div class="toggle-container">
+                        <span class="toggle-label">
+                            <i class="bi bi-arrow-clockwise"></i> Auto-Refresh
+                        </span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="autoRefreshToggle" onchange="toggleAutoRefresh()">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <span id="countdownBadge"
+                          class="badge bg-secondary countdown-badge"
+                          style="display: none;">
+                        <i class="bi bi-clock"></i> <span id="countdownValue">30</span>s
+                    </span>
+                </div>
+
+                <a th:href="@{/entry/create(region=${region})}"
+                   class="btn btn-success"
+                   th:if="${user.isAdmin() and isPrimary}">
+                    <i class="bi bi-plus-circle"></i> Create Entry
+                </a>
+
+                <a th:href="@{/regions}" class="btn btn-secondary">
+                    <i class="bi bi-arrow-left"></i> Back to Regions
+                </a>
+            </div>
+        </div>
+
+        <!-- Pattern Filter Card -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <form th:action="@{/region/{name}(name=${region})}" method="get">
+                    <div class="row g-3 align-items-end">
+                        <div class="col-md-8">
+                            <label for="pattern" class="form-label">Key Pattern</label>
+                            <input type="text" name="pattern" id="pattern"
+                                   class="form-control"
+                                   placeholder="e.g., user:* or * for all keys"
+                                   th:value="${pattern}">
+                            <small class="form-text text-muted">
+                                Use * for wildcard matching (e.g., user:* matches user:1, user:2, etc.)
+                            </small>
+                        </div>
+                        <div class="col-md-4">
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i class="bi bi-filter"></i> Filter Keys
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Keys Table Card -->
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <div>
+                    <h5 class="mb-0 d-inline">Keys in Region</h5>
+                    <span th:if="${hasMoreKeys}" class="badge bg-warning text-dark ms-2">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        More Keys available - Please refine your search
+                        (<span th:text="${displayedKeyCount}">10000</span> of
+                        <span th:text="${totalKeyCount}">50000</span> shown)
+                    </span>
+                </div>
+                <span th:if="${pattern != '*'}" class="badge bg-warning text-dark">
+                    Filtered by pattern: <span th:text="${pattern}">*</span>
+                </span>
+            </div>
+            <div class="card-body">
+                <!-- Alert for more keys available -->
+                <div th:if="${hasMoreKeys}" class="alert alert-warning d-flex align-items-center" role="alert">
+                    <i class="bi bi-exclamation-triangle-fill me-2" style="font-size: 1.5rem;"></i>
+                    <div>
+                        <strong>Too many keys to display!</strong><br>
+                        Showing <strong th:text="${displayedKeyCount}">25,000</strong> of
+                        <strong th:text="${totalKeyCount}">50,000</strong> keys matching your pattern.
+                        Please use the filter above to narrow down your search for better performance.
+                    </div>
+                </div>
+
+                <div th:if="${keys.isEmpty()}" class="alert alert-info mb-0">
+                    <i class="bi bi-info-circle"></i> No keys found in this region matching the pattern.
+                </div>
+
+                <div th:if="${!keys.isEmpty()}">
+                    <!-- Enhanced Table -->
+                    <div class="table-responsive">
+                        <table id="keysTable" class="table table-hover table-striped">
+                            <thead class="table-dark">
+                            <tr>
+                                <th>Key</th>
+                                <th class="no-sort">Actions</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            <tr th:each="key : ${keys}">
+                                <td>
+                                    <code class="text-primary" th:text="${key}">mykey</code>
+                                </td>
+                                <td>
+                                    <div class="btn-group" role="group">
+                                        <a th:href="@{/entry/{region}/{key}(region=${region},key=${key})}"
+                                           class="btn btn-sm btn-primary"
+                                           title="View entry details">
+                                            <i class="bi bi-eye"></i> View
+                                        </a>
+                                        <a th:href="@{/entry/edit(region=${region},key=${key})}"
+                                           class="btn btn-sm btn-warning"
+                                           th:if="${user.isAdmin() and isPrimary}"
+                                           title="Edit entry">
+                                            <i class="bi bi-pencil"></i> Edit
+                                        </a>
+                                        <button type="button"
+                                                class="btn btn-sm btn-danger"
+                                                th:if="${user.isAdmin() and isPrimary}"
+                                                th:attr="data-region=${region},data-key=${key}"
+                                                onclick="confirmDeleteKey(this)"
+                                                title="Delete entry">
+                                            <i class="bi bi-trash"></i> Delete
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Delete Entry Form (hidden) -->
+        <form id="deleteEntryForm" th:action="@{/entry/delete}" method="post" style="display:none;">
+            <input type="hidden" name="region" id="deleteRegion">
+            <input type="hidden" name="key" id="deleteKey">
+        </form>
+    </main>
+</th:block>
+
+<!-- Enhanced Table JavaScript -->
+<script th:src="@{/js/table-utils.js}"></script>
+<script th:inline="javascript">
+    // Get current pattern from server
+    const currentPattern = /*[[${pattern}]]*/ '*';
+
+    // Initialize enhanced table
+    document.addEventListener('DOMContentLoaded', function() {
+        const keysTable = document.getElementById('keysTable');
+        if (keysTable && keysTable.querySelector('tbody tr')) {
+            new EnhancedTable('keysTable', {
+                rowsPerPage: 10,
+                pageSizes: [5, 10, 50, 100, 'All'],
+                searchable: true,
+                sortable: true
+            });
+        }
+
+        // Initialize auto-refresh state from localStorage
+        initAutoRefresh();
+    });
+
+    // Delete confirmation
+    function confirmDeleteKey(button) {
+        const region = button.getAttribute('data-region');
+        const key = button.getAttribute('data-key');
+
+        if (confirm('Are you sure you want to delete key "' + key + '"?\n\nThis action cannot be undone.')) {
+            document.getElementById('deleteRegion').value = region;
+            document.getElementById('deleteKey').value = key;
+            document.getElementById('deleteEntryForm').submit();
+        }
+    }
+
+    // Auto-refresh functionality
+    let autoRefreshEnabled = false;
+    let countdownInterval = null;
+    let refreshInterval = null;
+    let remainingSeconds = 30;
+    const REFRESH_INTERVAL = 30; // seconds
+
+    function initAutoRefresh() {
+        // Load saved state from localStorage
+        const savedState = localStorage.getItem('regionDetailAutoRefresh');
+        if (savedState === 'true') {
+            enableAutoRefresh();
+        }
+    }
+
+    function toggleAutoRefresh() {
+        const toggle = document.getElementById('autoRefreshToggle');
+        if (toggle.checked) {
+            enableAutoRefresh();
+        } else {
+            disableAutoRefresh();
+        }
+    }
+
+    function enableAutoRefresh() {
+        autoRefreshEnabled = true;
+        remainingSeconds = REFRESH_INTERVAL;
+
+        // Update UI
+        document.getElementById('autoRefreshToggle').checked = true;
+        document.getElementById('countdownBadge').style.display = 'inline-block';
+
+        // Save state
+        localStorage.setItem('regionDetailAutoRefresh', 'true');
+
+        // Start countdown
+        startCountdown();
+
+        // Start refresh interval
+        refreshInterval = setInterval(function() {
+            // Preserve the pattern parameter when refreshing
+            if (currentPattern && currentPattern !== '*') {
+                window.location.href = window.location.pathname + '?pattern=' + encodeURIComponent(currentPattern);
+            } else {
+                window.location.reload();
+            }
+        }, REFRESH_INTERVAL * 1000);
+    }
+
+    function disableAutoRefresh() {
+        autoRefreshEnabled = false;
+
+        // Update UI
+        document.getElementById('autoRefreshToggle').checked = false;
+        document.getElementById('countdownBadge').style.display = 'none';
+
+        // Save state
+        localStorage.setItem('regionDetailAutoRefresh', 'false');
+
+        // Clear intervals
+        if (countdownInterval) {
+            clearInterval(countdownInterval);
+            countdownInterval = null;
+        }
+        if (refreshInterval) {
+            clearInterval(refreshInterval);
+            refreshInterval = null;
+        }
+    }
+
+    function startCountdown() {
+        // Clear existing countdown if any
+        if (countdownInterval) {
+            clearInterval(countdownInterval);
+        }
+
+        // Update countdown display
+        updateCountdownDisplay();
+
+        // Start new countdown
+        countdownInterval = setInterval(function() {
+            remainingSeconds--;
+
+            if (remainingSeconds <= 0) {
+                remainingSeconds = REFRESH_INTERVAL;
+            }
+
+            updateCountdownDisplay();
+        }, 1000);
+    }
+
+    function updateCountdownDisplay() {
+        const countdownValue = document.getElementById('countdownValue');
+        if (countdownValue) {
+            countdownValue.textContent = remainingSeconds;
+
+            // Change badge color based on time remaining
+            const badge = document.getElementById('countdownBadge');
+            badge.className = 'badge countdown-badge';
+
+            if (remainingSeconds <= 5) {
+                badge.classList.add('bg-danger');
+            } else if (remainingSeconds <= 10) {
+                badge.classList.add('bg-warning', 'text-dark');
+            } else {
+                badge.classList.add('bg-secondary');
+            }
+        }
+    }
+
+    // Clean up on page unload
+    window.addEventListener('beforeunload', function() {
+        if (countdownInterval) {
+            clearInterval(countdownInterval);
+        }
+        if (refreshInterval) {
+            clearInterval(refreshInterval);
+        }
+    });
+</script>
+</body>
+</html>
