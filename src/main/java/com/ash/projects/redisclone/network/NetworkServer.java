@@ -23,6 +23,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.Base64;
 
 @Component
 @ConditionalOnProperty(name = "network.server.enabled", havingValue = "true", matchIfMissing = true)
@@ -125,6 +126,7 @@ public class NetworkServer {
 
             return switch (cmd) {
                 case "PING" -> "+PONG";
+                case "B64SET" -> handleB64Set(region, parts, argStart);
                 case "SET" -> handleSet(region, parts, argStart);
                 case "GET" -> handleGet(region, parts, argStart);
                 case "DEL" -> handleDel(region, parts, argStart);
@@ -251,7 +253,24 @@ public class NetworkServer {
 
             return parts.toArray(new String[0]);
         }
+        private String handleB64Set(String region, String[] parts, int start) {
+            if (parts.length < start + 2) {
+                return "-ERR wrong number of arguments for 'b64set' command";
+            }
 
+            String key = parts[start];
+            String value = parts[start + 1];
+            // Get the standard decoder
+            Base64.Decoder decoder = Base64.getDecoder();
+
+            // 1. Decode the Base64 string into a byte array
+            byte[] decodedBytes = decoder.decode(value);
+
+            // 2. Convert the byte array to a String using a character set (e.g., UTF-8)
+            value = new String(decodedBytes, StandardCharsets.UTF_8);
+            parts[start +1] = value;
+            return handleSet(region, parts, start);
+        }
         private String handleSet(String region, String[] parts, int start) {
             if (parts.length < start + 2) {
                 return "-ERR wrong number of arguments for 'set' command";

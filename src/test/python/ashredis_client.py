@@ -52,6 +52,21 @@ class AshRedisClient:
         """PING command"""
         return self._send_command('PING')
 
+    def b64set(self, key: str, value: str, region: Optional[str] = None,
+            ttl_seconds: Optional[int] = None) -> str:
+        """SET command"""
+        region = region or self.default_region
+
+        cmd = ['B64SET']
+        if region:
+            cmd.append(f'@{region}')
+        cmd.extend([key, value])
+
+        if ttl_seconds and ttl_seconds > 0:
+            cmd.extend(['EX', str(ttl_seconds)])
+
+        return self._send_command(' '.join(cmd))
+
     def set(self, key: str, value: str, region: Optional[str] = None,
             ttl_seconds: Optional[int] = None) -> str:
         """SET command"""
