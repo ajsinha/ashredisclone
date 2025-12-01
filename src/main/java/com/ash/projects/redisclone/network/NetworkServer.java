@@ -31,6 +31,9 @@ public class NetworkServer {
 
     private static final Logger logger = LoggerFactory.getLogger(NetworkServer.class);
 
+    @Value("${org.apache.mina.filter.codec.textline.decoder_max_length:1000000}")
+    private int decoderMaxLineLength;
+
     @Value("${network.server.port:6379}")
     private int port;
 
@@ -47,12 +50,15 @@ public class NetworkServer {
 
     @PostConstruct
     public void start() throws IOException {
+        TextLineCodecFactory codecFactory = new TextLineCodecFactory(StandardCharsets.UTF_8);
+        codecFactory.setDecoderMaxLineLength(decoderMaxLineLength);
+
         acceptor = new NioSocketAcceptor();
 
         // Add filters
         acceptor.getFilterChain().addLast("logger", new LoggingFilter());
         acceptor.getFilterChain().addLast("codec",
-                new ProtocolCodecFilter(new TextLineCodecFactory(StandardCharsets.UTF_8)));
+                new ProtocolCodecFilter(codecFactory));
 
         // Set handler
         acceptor.setHandler(new RedisProtocolHandler());

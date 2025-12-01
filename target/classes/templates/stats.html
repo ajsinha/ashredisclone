@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Statistics - AshRedis</title>
+</head>
+<body>
+<th:block th:replace="~{base :: layout(~{::title}, ~{::main})}">
+    <main>
+        <h1 class="mb-4">System Statistics</h1>
+
+        <div class="row">
+            <!-- System Info -->
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">System Information</h5>
+                    </div>
+                    <div class="card-body">
+                        <dl class="row mb-0">
+                            <dt class="col-sm-6">Version:</dt>
+                            <dd class="col-sm-6" th:text="${info.version}">1.0.0</dd>
+
+                            <dt class="col-sm-6">Uptime:</dt>
+                            <dd class="col-sm-6" th:text="${info.uptime_seconds + ' seconds'}">123 seconds</dd>
+
+                            <dt class="col-sm-6">Instance Mode:</dt>
+                            <dd class="col-sm-6">
+                                    <span class="badge" th:classappend="${isPrimary ? 'bg-success' : 'bg-warning'}"
+                                          th:text="${isPrimary ? 'PRIMARY' : 'SECONDARY'}">PRIMARY</span>
+                            </dd>
+
+                            <dt class="col-sm-6">Database:</dt>
+                            <dd class="col-sm-6">
+                                <span class="badge bg-info me-2" th:text="${repositoryType}">SQL</span>
+                                <span th:text="${repositoryInfo}">SQL Database</span>
+                            </dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Regions Info -->
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">Regions</h5>
+                    </div>
+                    <div class="card-body">
+                        <dl class="row mb-0">
+                            <dt class="col-sm-6">Total Regions:</dt>
+                            <dd class="col-sm-6" th:text="${info.regions != null ? info.regions.size() : 0}">0</dd>
+
+                            <dt class="col-sm-6">Region Names:</dt>
+                            <dd class="col-sm-6">
+                                    <span th:each="region, iterStat : ${info.regions}"
+                                          class="badge bg-primary me-1" th:text="${region}">region0</span>
+                            </dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- PubSub Stats (if available) -->
+        <div class="row" th:if="${pubsubStats != null}">
+            <div class="col-12 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">Pub/Sub Statistics</h5>
+                    </div>
+                    <div class="card-body">
+                        <dl class="row mb-0">
+                            <dt class="col-sm-4">Channel Subscriptions:</dt>
+                            <dd class="col-sm-8" th:text="${pubsubStats.channels}">0</dd>
+
+                            <dt class="col-sm-4">Region Subscriptions:</dt>
+                            <dd class="col-sm-8" th:text="${pubsubStats.regions}">0</dd>
+
+                            <dt class="col-sm-4">Key Subscriptions:</dt>
+                            <dd class="col-sm-8" th:text="${pubsubStats.keys}">0</dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+</th:block>
+</body>
+</html>
